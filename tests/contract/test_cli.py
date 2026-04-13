@@ -203,3 +203,51 @@ class TestCLIOutputFormat:
             assert "profiles" in data
             names = [p["name"] for p in data["profiles"]]
             assert "clean" in names
+
+
+class TestCLIProfileSwitchPersistence:
+    """Profile switch should persist shared config used by GUI and CLI."""
+
+    def test_switch_persists_when_service_running(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        from voicechanger.config import Config, ProfilesConfig
+
+        cfg = Config(
+            profiles=ProfilesConfig(
+                builtin_dir=str(builtin_profiles),
+                user_dir=str(tmp_profiles["user"]),
+                active_profile="clean",
+            )
+        )
+
+        with patch("voicechanger.cli._get_config", return_value=cfg), patch(
+            "voicechanger.cli._send_ipc_command", return_value={"ok": True, "data": {}}
+        ), patch("voicechanger.cli.save_config") as mock_save:
+            with pytest.raises(SystemExit) as exc:
+                main(["profile", "switch", "high-pitched"])
+            assert exc.value.code == 0
+            assert cfg.profiles.active_profile == "high-pitched"
+            mock_save.assert_called_once()
+
+    def test_switch_persists_when_service_offline(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        from voicechanger.config import Config, ProfilesConfig
+
+        cfg = Config(
+            profiles=ProfilesConfig(
+                builtin_dir=str(builtin_profiles),
+                user_dir=str(tmp_profiles["user"]),
+                active_profile="clean",
+            )
+        )
+
+        with patch("voicechanger.cli._get_config", return_value=cfg), patch(
+            "voicechanger.cli._send_ipc_command", side_effect=SystemExit(1)
+        ), patch("voicechanger.cli.save_config") as mock_save:
+            with pytest.raises(SystemExit) as exc:
+                main(["profile", "switch", "high-pitched"])
+            assert exc.value.code == 0
+            assert cfg.profiles.active_profile == "high-pitched"
+            mock_save.assert_called_once()

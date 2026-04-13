@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, field
 
 from voicechanger.audio import AudioPipeline
@@ -63,40 +64,80 @@ def build_profile_from_gui_state(
 
 
 class PreviewManager:
-    """Manages live audio preview for the GUI using AudioPipeline."""
+    """Manages live audio preview for the GUI using AudioPipeline.
+
+    All audio operations run on a background thread to avoid blocking
+    the Flet event loop.
+    """
 
     def __init__(self) -> None:
         self._pipeline = AudioPipeline()
         self._active = False
+        self._lock = threading.Lock()
+        self._update_timer: threading.Timer | None = None
 
     @property
     def is_active(self) -> bool:
         return self._active
 
     def start_preview(self, effects: list[GuiEffectState]) -> None:
-        """Start live audio preview with the given effects."""
+        """Start live audio preview with the given effects (non-blocking)."""
         profile = self._build_preview_profile(effects)
-        try:
-            self._pipeline.start(profile)
-            self._active = True
-        except Exception:
-            logger.warning("Failed to start audio preview", exc_info=True)
-            self._active = False
+
+        def _run() -> None:
+            with self._lock:
+                try:
+                    self._pipeline.start(profile)
+                    self._active = True
+                except Exception:
+                    logger.warning("Failed to start audio preview", exc_info=True)
+                    self._active = False
+
+        threading.Thread(target=_run, daemon=True).start()
 
     def update_preview(self, effects: list[GuiEffectState]) -> None:
-        """Update the live preview with new effect parameters."""
+        """Update the live preview with new effect parameters (non-blocking).
+
+        Rapid calls are debounced: only the last update within 50 ms fires.
+        """
         if not self._active:
-            self.start_preview(effects)
             return
         profile = self._build_preview_profile(effects)
-        self._pipeline.switch_profile(profile)
+
+        # Cancel any pending debounced update
+        if self._update_timer is not None:
+            self._update_timer.cancel()
+
+        def _run() -> None:
+            with self._lock:
+                try:
+                    self._pipeline.switch_profile(profile)
+                except Exception:
+                    logger.warning("Failed to update preview", exc_info=True)
+
+        self._update_timer = threading.Timer(0.05, _run)
+        self._update_timer.daemon = True
+        self._update_timer.start()
 
     def stop_preview(self) -> None:
-        """Stop the live audio preview."""
+        """Stop the live audio preview (non-blocking)."""
         if not self._active:
             return
-        self._pipeline.stop()
         self._active = False
+
+        # Cancel any pending debounced update
+        if self._update_timer is not None:
+            self._update_timer.cancel()
+            self._update_timer = None
+
+        def _run() -> None:
+            with self._lock:
+                try:
+                    self._pipeline.stop()
+                except Exception:
+                    logger.warning("Failed to stop preview", exc_info=True)
+
+        threading.Thread(target=_run, daemon=True).start()
 
     @staticmethod
     def _build_preview_profile(effects: list[GuiEffectState]) -> Profile:

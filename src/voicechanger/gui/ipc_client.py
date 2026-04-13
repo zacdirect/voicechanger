@@ -115,3 +115,6 @@ class IpcClient:
         if output_device is not None:
             params["output_device"] = output_device
         return await self.send_command("set_device", params)
+
+    async def shutdown(self) -> dict[str, Any]:
+        return await self.send_command("shutdown")

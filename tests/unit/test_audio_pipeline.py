@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import types
 from unittest.mock import MagicMock, patch
 
-from voicechanger.audio import AudioPipeline, PipelineState
+from voicechanger.audio import AudioPipeline, PipelineState, _candidate_device_pairs
 from voicechanger.profile import Profile
 
 
@@ -41,6 +42,39 @@ class TestPipelineStateMachine:
         assert pipeline.state == PipelineState.STOPPED
 
 
+class TestCandidateDevicePairs:
+    """Test ordered fallback pair generation for robust defaults."""
+
+    def test_default_pair_uses_directional_fallbacks(self) -> None:
+        fake_audio_stream = types.SimpleNamespace(
+            default_input_device_name="Default ALSA Output (currently PipeWire Media Server)",
+            default_output_device_name="Default ALSA Output (currently PipeWire Media Server)",
+            input_device_names=[
+                "Default ALSA Output (currently PipeWire Media Server)",
+                "PipeWire Sound Server",
+                "USB C Earbuds, USB Audio; Front output / input",
+            ],
+            output_device_names=[
+                "Default ALSA Output (currently PipeWire Media Server)",
+                "PipeWire Sound Server",
+                "USB C Earbuds, USB Audio; Front output / input",
+            ],
+        )
+        fake_io_module = types.SimpleNamespace(AudioStream=fake_audio_stream)
+
+        with patch.dict("sys.modules", {"pedalboard.io": fake_io_module}):
+            pairs = _candidate_device_pairs("default", "default")
+
+        assert pairs
+        first_in, first_out = pairs[0]
+        assert first_in != "Default ALSA Output (currently PipeWire Media Server)"
+        assert first_out in {
+            "Default ALSA Output (currently PipeWire Media Server)",
+            "PipeWire Sound Server",
+            "USB C Earbuds, USB Audio; Front output / input",
+        }
+
+
 class TestPluginConstruction:
     """Test building plugin list from profile."""
 
@@ -68,6 +102,18 @@ class TestPluginConstruction:
         pipeline.start(profile, sample_rate=48000, buffer_size=256)
         assert pipeline.plugin_count == 2
 
+    @patch("voicechanger.audio._open_stream")
+    def test_live_pitch_shift_falls_back(self, mock_open: MagicMock) -> None:
+        mock_open.return_value = MagicMock()
+        pipeline = AudioPipeline()
+        profile = Profile(
+            name="live-pitch",
+            effects=[{"type": "LivePitchShift", "params": {"semitones": -4.0}}],
+        )
+        pipeline.start(profile, sample_rate=48000, buffer_size=256)
+        # With stock pedalboard, LivePitchShift should map to PitchShift instead of being dropped.
+        assert pipeline.plugin_count == 1
+
 
 class TestPassThroughFallback:
     """Test pass-through fallback on bad profile."""
@@ -86,6 +132,53 @@ class TestPassThroughFallback:
         # Should still be running (degraded/pass-through), not crashed
         assert pipeline.state in (PipelineState.RUNNING, PipelineState.DEGRADED)
         assert pipeline.plugin_count == 0
+
+
+class TestDeviceOpenFallbacks:
+    """Test startup retries alternate device pairs when open fails."""
+
+    @patch("voicechanger.audio._candidate_device_pairs")
+    @patch("voicechanger.audio._open_stream")
+    def test_start_retries_alternate_pairs(
+        self,
+        mock_open: MagicMock,
+        mock_pairs: MagicMock,
+    ) -> None:
+        mock_pairs.return_value = [
+            ("bad-in", "bad-out"),
+            ("good-in", "good-out"),
+        ]
+        mock_open.side_effect = [ValueError("no channels"), MagicMock()]
+
+        pipeline = AudioPipeline()
+        profile = Profile(name="clean", effects=[])
+        pipeline.start(profile, sample_rate=48000, buffer_size=256)
+
+        assert mock_open.call_count == 2
+        assert pipeline.state == PipelineState.RUNNING
+
+    @patch("voicechanger.audio._candidate_device_pairs")
+    @patch("voicechanger.audio._open_stream")
+    def test_start_records_opened_device_details(
+        self,
+        mock_open: MagicMock,
+        mock_pairs: MagicMock,
+    ) -> None:
+        mock_pairs.return_value = [("chosen-in", "chosen-out")]
+        stream = MagicMock()
+        stream.num_input_channels = 1
+        stream.num_output_channels = 2
+        mock_open.return_value = stream
+
+        pipeline = AudioPipeline()
+        profile = Profile(name="clean", effects=[])
+        pipeline.start(profile, sample_rate=48000, buffer_size=256)
+
+        status = pipeline.get_status()
+        assert status["opened_input_device"] == "chosen-in"
+        assert status["opened_output_device"] == "chosen-out"
+        assert status["opened_input_channels"] == 1
+        assert status["opened_output_channels"] == 2
 
 
 class TestMonitorEnabled:
@@ -235,3 +328,23 @@ class TestLevelCallback:
         status = pipeline.get_status()
         assert "input_level" in status
         assert "output_level" in status
+
+    @patch("voicechanger.audio._open_stream")
+    def test_poll_levels_reads_with_buffer_size_and_boosts_meter(
+        self, mock_open: MagicMock
+    ) -> None:
+        import numpy as np
+
+        stream = MagicMock()
+        stream.read.return_value = np.full((1, 256), 0.1, dtype=np.float32)
+        mock_open.return_value = stream
+
+        pipeline = AudioPipeline()
+        profile = Profile(name="clean", effects=[])
+        pipeline.start(profile, sample_rate=48000, buffer_size=256)
+
+        pipeline.poll_levels()
+
+        stream.read.assert_called_with(256)
+        # 0.1 boosted by x4 => noticeably above raw level.
+        assert pipeline.input_level > 0.2

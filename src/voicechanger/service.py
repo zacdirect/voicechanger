@@ -195,6 +195,7 @@ class Service:
             "reload_profiles": self._cmd_reload_profiles,
             "set_monitor": self._cmd_set_monitor,
             "set_device": self._cmd_set_device,
+            "shutdown": self._cmd_shutdown,
         }
 
         handler = handlers.get(command)
@@ -404,6 +405,14 @@ class Service:
                 "ok": False,
                 "error": {"code": "DEVICE_OPEN_FAILED", "message": str(e)},
             }
+
+    def _cmd_shutdown(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Request graceful service shutdown."""
+        self._shutdown_event.set()
+        return {
+            "ok": True,
+            "data": {"shutting_down": True},
+        }
 
     def _cleanup(self) -> None:
         """Clean up resources on shutdown."""

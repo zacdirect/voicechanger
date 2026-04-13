@@ -1,4 +1,4 @@
-"""Shared GUI state — PipelineMode, GuiState, EditingProfile, generate_draft_name()."""
+"""Shared GUI state — GuiState, EditingProfile, generate_draft_name()."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ from voicechanger.gui.logic import GuiEffectState
 
 
 class PipelineMode(Enum):
-    """How the GUI interacts with the audio pipeline."""
+    """How the GUI interacts with the audio pipeline.
+
+    The GUI always launches a service subprocess — this enum is kept for
+    backward compatibility only.
+    """
 
     EMBEDDED = "EMBEDDED"
     REMOTE = "REMOTE"

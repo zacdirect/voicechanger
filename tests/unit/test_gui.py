@@ -103,11 +103,27 @@ class TestBuildProfile:
 class TestPreviewManager:
     """Test PreviewManager lifecycle (no tkinter, no real audio)."""
 
+    def _wait_for_lock(self, mgr: PreviewManager, timeout: float = 1.0) -> None:
+        """Wait until PreviewManager's background thread releases the lock.
+
+        Accounts for debounced updates (50ms timer) by waiting a bit longer.
+        """
+        import time
+        # Allow debounce timer to fire
+        time.sleep(0.1)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if mgr._lock.acquire(timeout=0.01):
+                mgr._lock.release()
+                return
+            time.sleep(0.01)
+
     def test_start_preview_creates_pipeline(self) -> None:
         mgr = PreviewManager()
         effects = [GuiEffectState(type="Gain", params={"gain_db": 3.0})]
         with patch.object(mgr._pipeline, "start") as mock_start:
             mgr.start_preview(effects)
+            self._wait_for_lock(mgr)
             mock_start.assert_called_once()
             profile = mock_start.call_args[0][0]
             assert profile.name == "preview"
@@ -120,8 +136,10 @@ class TestPreviewManager:
         effects = [GuiEffectState(type="Gain", params={"gain_db": 0.0})]
         with patch.object(mgr._pipeline, "start"):
             mgr.start_preview(effects)
+            self._wait_for_lock(mgr)
         with patch.object(mgr._pipeline, "stop") as mock_stop:
             mgr.stop_preview()
+            self._wait_for_lock(mgr)
             mock_stop.assert_called_once()
         assert not mgr.is_active
 
@@ -136,6 +154,7 @@ class TestPreviewManager:
         effects1 = [GuiEffectState(type="Gain", params={"gain_db": 3.0})]
         with patch.object(mgr._pipeline, "start"):
             mgr.start_preview(effects1)
+            self._wait_for_lock(mgr)
         # Force pipeline state to RUNNING so switch_profile works
         mgr._pipeline._state = PipelineState.RUNNING
         effects2 = [
@@ -144,17 +163,18 @@ class TestPreviewManager:
         ]
         with patch.object(mgr._pipeline, "switch_profile") as mock_switch:
             mgr.update_preview(effects2)
+            self._wait_for_lock(mgr)
             mock_switch.assert_called_once()
             profile = mock_switch.call_args[0][0]
             assert len(profile.effects) == 2
 
-    def test_update_preview_when_not_active_starts(self) -> None:
+    def test_update_preview_when_not_active_is_noop(self) -> None:
         mgr = PreviewManager()
         effects = [GuiEffectState(type="Gain", params={"gain_db": 0.0})]
         with patch.object(mgr._pipeline, "start") as mock_start:
             mgr.update_preview(effects)
-            mock_start.assert_called_once()
-        assert mgr.is_active
+            mock_start.assert_not_called()
+        assert not mgr.is_active
 
     def test_preview_builds_correct_plugin_list(self) -> None:
         mgr = PreviewManager()
@@ -165,6 +185,7 @@ class TestPreviewManager:
         ]
         with patch.object(mgr._pipeline, "start") as mock_start:
             mgr.start_preview(effects)
+            self._wait_for_lock(mgr)
             profile = mock_start.call_args[0][0]
             assert len(profile.effects) == 3
             assert profile.effects[0]["type"] == "LivePitchShift"
@@ -176,6 +197,7 @@ class TestPreviewManager:
         effects = [GuiEffectState(type="Gain", params={"gain_db": 0.0})]
         with patch.object(mgr._pipeline, "start", side_effect=Exception("no audio")):
             mgr.start_preview(effects)
+            self._wait_for_lock(mgr)
         # Should not crash, and should not be marked active
         assert not mgr.is_active
 
@@ -183,6 +205,7 @@ class TestPreviewManager:
         mgr = PreviewManager()
         with patch.object(mgr._pipeline, "start") as mock_start:
             mgr.start_preview([])
+            self._wait_for_lock(mgr)
             profile = mock_start.call_args[0][0]
             assert profile.effects == []
 

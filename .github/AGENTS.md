@@ -9,10 +9,16 @@ This file captures project-specific guidance for agentic coding work in this rep
 Use these rules when editing GUI code under src/voicechanger/gui/.
 
 - Treat this project as using Flet 0.84 APIs. Verify behavior against the installed version before using patterns from older examples.
-- FilePicker uses synchronous return values in this version:
-  - Use `pick_files(...) -> list[FilePickerFile]`
-  - Use `save_file(...) -> str | None`
+- FilePicker follows service API semantics (docs: `services/filepicker`):
+  - Treat `pick_files(...)`, `save_file(...)`, and `get_directory_path(...)` as async methods.
+  - In event handlers, use `async def ...` and `await` these methods.
+  - Prefer direct documented calls such as:
+    - `files = await ft.FilePicker().pick_files(...)`
+    - `path = await ft.FilePicker().save_file(...)`
   - Do not pass `on_result` to `FilePicker(...)`.
+  - Do not manually mount FilePicker into layout containers.
+- Linux desktop requirement:
+  - Ensure `zenity` is installed for FilePicker dialogs to work (`sudo apt-get install zenity`).
 - Banner controls require at least one visible action control:
   - Never set `actions=[]`.
   - Include a dismiss/confirm action button even if `open=False` initially.

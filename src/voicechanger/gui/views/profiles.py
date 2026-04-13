@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 import flet as ft
 
 from voicechanger.gui.logic import GuiEffectState
-from voicechanger.gui.state import EditingProfile, GuiState, PipelineMode, generate_draft_name
+from voicechanger.gui.state import EditingProfile, GuiState, generate_draft_name
 from voicechanger.profile import Profile
 from voicechanger.registry import ProfileRegistry
 
@@ -29,6 +29,8 @@ class ProfilesView(ft.Column):
         *,
         navigate_to_editor: Any | None = None,
         show_snackbar: Any | None = None,
+        persist_settings: Any | None = None,
+        on_activate: Any | None = None,
     ) -> None:
         super().__init__(expand=True, scroll=ft.ScrollMode.AUTO)
         self._state = state
@@ -36,9 +38,10 @@ class ProfilesView(ft.Column):
         self._ipc_client: IpcClient | None = None
         self._navigate_to_editor = navigate_to_editor
         self._show_snackbar = show_snackbar
+        self._persist_settings = persist_settings
+        self._on_activate_callback = on_activate
 
         self._selected_name: str | None = None
-        self._file_picker = ft.FilePicker()
 
         self._build_ui()
         self._refresh_list()
@@ -110,7 +113,6 @@ class ProfilesView(ft.Column):
                 ],
                 expand=True,
             ),
-            self._file_picker,
         ]
 
     # ── List management ──────────────────────────────────────────────
@@ -184,12 +186,16 @@ class ProfilesView(ft.Column):
         if profile is None:
             return
 
-        if self._state.mode == PipelineMode.REMOTE and self._ipc_client:
+        if self._ipc_client:
             async def _activate() -> None:
                 try:
                     await self._ipc_client.switch_profile(self._selected_name)
                     self._state.active_profile_name = self._selected_name
+                    if self._persist_settings:
+                        self._persist_settings(profile_name=self._selected_name)
                     self._refresh_list()
+                    if self._on_activate_callback:
+                        self._on_activate_callback()
                     if self._show_snackbar:
                         self._show_snackbar(f"Activated: {self._selected_name}")
                     if self.page:
@@ -202,9 +208,13 @@ class ProfilesView(ft.Column):
             if self.page:
                 self.page.run_task(_activate)
         else:
-            # Embedded mode — pipeline switch handled by control view
+            # Fallback — just update local state
             self._state.active_profile_name = self._selected_name
+            if self._persist_settings:
+                self._persist_settings(profile_name=self._selected_name)
             self._refresh_list()
+            if self._on_activate_callback:
+                self._on_activate_callback()
             if self._show_snackbar:
                 self._show_snackbar(f"Activated: {self._selected_name}")
             if self.page:
@@ -271,12 +281,12 @@ class ProfilesView(ft.Column):
                 if self._show_snackbar:
                     self._show_snackbar(f"Error: {exc}", error=True)
             if self.page:
-                self.page.close(dialog)
+                self.page.pop_dialog()
                 self.page.update()
 
         def _cancel(e: ft.ControlEvent) -> None:
             if self.page:
-                self.page.close(dialog)
+                self.page.pop_dialog()
 
         dialog = ft.AlertDialog(
             modal=True,
@@ -288,16 +298,17 @@ class ProfilesView(ft.Column):
             ],
         )
         if self.page:
-            self.page.open(dialog)
+            self.page.show_dialog(dialog)
 
-    def _on_export(self, _e: ft.ControlEvent) -> None:
+    async def _on_export(self, _e: ft.ControlEvent) -> None:
         if self._selected_name is None:
             return
         if not self.page:
             return
-        path = self._file_picker.save_file(
+        path = await ft.FilePicker().save_file(
             dialog_title="Export profile",
             file_name=f"{self._selected_name}.json",
+            file_type=ft.FilePickerFileType.CUSTOM,
             allowed_extensions=["json"],
         )
         if path:
@@ -312,11 +323,12 @@ class ProfilesView(ft.Column):
                     if self._show_snackbar:
                         self._show_snackbar(f"Export error: {exc}", error=True)
 
-    def _on_import(self, _e: ft.ControlEvent) -> None:
+    async def _on_import(self, _e: ft.ControlEvent) -> None:
         if not self.page:
             return
-        files = self._file_picker.pick_files(
+        files = await ft.FilePicker().pick_files(
             dialog_title="Import profile",
+            file_type=ft.FilePickerFileType.CUSTOM,
             allowed_extensions=["json"],
             allow_multiple=False,
         )

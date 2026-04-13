@@ -16,6 +16,7 @@ from voicechanger.gui.logic import (
     slider_to_param,
 )
 from voicechanger.gui.state import EditingProfile, GuiState, generate_draft_name
+from voicechanger.profile import NAME_REGEX
 
 if TYPE_CHECKING:
     from voicechanger.registry import ProfileRegistry
@@ -32,11 +33,13 @@ class EditorView(ft.Column):
         registry: ProfileRegistry,
         *,
         show_snackbar: Any | None = None,
+        on_save: Any | None = None,
     ) -> None:
         super().__init__(expand=True, scroll=ft.ScrollMode.AUTO)
         self._state = state
         self._registry = registry
         self._show_snackbar = show_snackbar
+        self._on_save_callback = on_save
         self._preview = PreviewManager()
 
         self._build_ui()
@@ -129,8 +132,11 @@ class EditorView(ft.Column):
                 self._build_effect_card(effect)
             )
 
-        if self.page:
-            self.page.update()
+        try:
+            if self.page:
+                self.page.update()
+        except RuntimeError:
+            pass  # Not yet mounted — update will happen on attach
 
     def _sync_effects_to_state(self) -> None:
         """Sync current slider values back to editing_profile."""
@@ -195,12 +201,16 @@ class EditorView(ft.Column):
         effect.params[param_name] = new_val
         label.value = f"{param_name}: {new_val:.2f}"
         self._sync_effects_to_state()
+        self._notify_preview()
+        if self.page:
+            self.page.update()
+
+    def _notify_preview(self) -> None:
+        """If preview is active, restart it with current effects."""
         if self._preview.is_active:
             ep = self._state.editing_profile
             if ep:
                 self._preview.update_preview(ep.effects)
-        if self.page:
-            self.page.update()
 
     def _rebuild_effect_list(self) -> None:
         ep = self._state.editing_profile
@@ -208,6 +218,7 @@ class EditorView(ft.Column):
         if ep:
             for effect in ep.effects:
                 self._effect_list.controls.append(self._build_effect_card(effect))
+        self._notify_preview()
         if self.page:
             self.page.update()
 
@@ -219,7 +230,30 @@ class EditorView(ft.Column):
             self.page.update()
 
     def _on_name_change(self, _e: ft.ControlEvent) -> None:
+        raw = self._name_field.value or ""
+        slugified = raw.lower().replace(" ", "-").replace("_", "-")
+        if slugified != raw:
+            self._name_field.value = slugified
+        self._validate_name()
         self._sync_effects_to_state()
+
+    def _validate_name(self) -> None:
+        """Check profile name and show inline error / disable Save."""
+        name = self._name_field.value or ""
+        if not name:
+            self._name_field.error_text = None
+            self._btn_save.disabled = True
+        elif NAME_REGEX.match(name):
+            self._name_field.error_text = None
+            self._btn_save.disabled = False
+        else:
+            self._name_field.error_text = "Lowercase a-z, 0-9, hyphens; 2-64 chars"
+            self._btn_save.disabled = True
+        try:
+            if self.page:
+                self.page.update()
+        except RuntimeError:
+            pass
 
     def _on_add_effect(self, _e: ft.ControlEvent) -> None:
         if not self._effect_dropdown.value:
@@ -236,6 +270,7 @@ class EditorView(ft.Column):
         ep.effects.append(new_effect)
         self._effect_list.controls.append(self._build_effect_card(new_effect))
         ep.is_dirty = True
+        self._notify_preview()
         if self.page:
             self.page.update()
 
@@ -276,6 +311,8 @@ class EditorView(ft.Column):
             ep.is_dirty = False
             if self._show_snackbar:
                 self._show_snackbar(f"Saved: {ep.name}")
+            if self._on_save_callback:
+                self._on_save_callback()
         except Exception as exc:
             logger.error("Save failed: %s", exc)
             if self._show_snackbar:
@@ -308,17 +345,19 @@ class EditorView(ft.Column):
                 self._name_field.value = new_name
                 if self._show_snackbar:
                     self._show_snackbar(f"Saved as: {new_name}")
+                if self._on_save_callback:
+                    self._on_save_callback()
             except Exception as exc:
                 logger.error("Save As failed: %s", exc)
                 if self._show_snackbar:
                     self._show_snackbar(f"Error: {exc}", error=True)
             if self.page:
-                self.page.close(dlg)
+                self.page.pop_dialog()
                 self.page.update()
 
         def _cancel(e: ft.ControlEvent) -> None:
             if self.page:
-                self.page.close(dlg)
+                self.page.pop_dialog()
 
         suggested = generate_draft_name(ep.name, existing) if ep.is_builtin_fork else ep.name
         name_field = ft.TextField(label="Profile name", value=suggested, autofocus=True)
@@ -333,4 +372,4 @@ class EditorView(ft.Column):
             ],
         )
         if self.page:
-            self.page.open(dlg)
+            self.page.show_dialog(dlg)

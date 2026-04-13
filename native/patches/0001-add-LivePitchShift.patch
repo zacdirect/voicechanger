@@ -1,0 +1,82 @@
+diff --git a/pedalboard/plugins/PitchShift.h b/pedalboard/plugins/PitchShift.h
+index 9c64cdb..b51d475 100644
+--- a/pedalboard/plugins/PitchShift.h
++++ b/pedalboard/plugins/PitchShift.h
+@@ -58,6 +58,44 @@ public:
+   }
+ };
+ 
++/*
++ * Low-latency pitch shift for live / AudioStream use.
++ *
++ * Wraps RubberbandPlugin directly — no PrimeWithSilence delay line —
++ * so it adds only RubberBand's own algorithmic latency (typically < 100 ms)
++ * instead of the 1-second silence guard that PitchShift uses for
++ * sample-accurate offline processing.
++ *
++ * Trade-off: the first few buffers may contain a short fade-in instead
++ * of sample-perfect alignment.  Inaudible in a live monitoring context.
++ */
++class LivePitchShift : public RubberbandPlugin {
++private:
++  double _semitones = 0.0;
++
++  static constexpr int MIN_SEMITONES = -6 * 12;
++  static constexpr int MAX_SEMITONES = 6 * 12;
++
++  double getScaleFactor() { return pow(2, (getSemitones() / 12)); }
++
++public:
++  void setSemitones(double semitones) {
++    if (semitones < MIN_SEMITONES || semitones > MAX_SEMITONES) {
++      throw std::range_error("Semitones of pitch must be a value between " +
++                             std::to_string(MIN_SEMITONES) + "st and " +
++                             std::to_string(MAX_SEMITONES) + "st.");
++    }
++    _semitones = semitones;
++  }
++
++  double getSemitones() const { return _semitones; }
++
++  void prepare(const juce::dsp::ProcessSpec &spec) override {
++    RubberbandPlugin::prepare(spec);
++    getStretcher().setPitchScale(getScaleFactor());
++  }
++};
++
+ inline void init_pitch_shift(py::module &m) {
+   py::class_<PitchShift, Plugin, std::shared_ptr<PitchShift>>(
+       m, "PitchShift",
+@@ -82,5 +120,32 @@ inline void init_pitch_shift(py::module &m) {
+            })
+       .def_property("semitones", &PitchShift::getSemitones,
+                     &PitchShift::setSemitones);
++
++  py::class_<LivePitchShift, Plugin, std::shared_ptr<LivePitchShift>>(
++      m, "LivePitchShift",
++      "A low-latency pitch shifting effect for live audio streams.\n\n"
++      "Unlike :class:`PitchShift`, this plugin does **not** add a 1-second "
++      "silence guard, making it suitable for real-time monitoring via "
++      ":class:`pedalboard.io.AudioStream`. The first few milliseconds of "
++      "output may fade in as Rubber Band fills its internal buffers.\n\n"
++      "For sample-accurate offline processing, use :class:`PitchShift` "
++      "instead.")
++      .def(py::init([](double scale) {
++             auto plugin = std::make_unique<LivePitchShift>();
++             plugin->setSemitones(scale);
++             return plugin;
++           }),
++           py::arg("semitones") = 0.0)
++      .def("__repr__",
++           [](const LivePitchShift &plugin) {
++             std::ostringstream ss;
++             ss << "<pedalboard.LivePitchShift";
++             ss << " semitones=" << plugin.getSemitones();
++             ss << " at " << &plugin;
++             ss << ">";
++             return ss.str();
++           })
++      .def_property("semitones", &LivePitchShift::getSemitones,
++                    &LivePitchShift::setSemitones);
+ }
+ }; // namespace Pedalboard

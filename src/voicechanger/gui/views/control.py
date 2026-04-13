@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
-import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import flet as ft
 
-from voicechanger.audio import AudioPipeline
 from voicechanger.device import DeviceMonitor
-from voicechanger.gui.state import GuiState, PipelineMode
-from voicechanger.profile import Profile
+from voicechanger.gui.ipc_client import IpcClient
+from voicechanger.gui.state import GuiState
+from voicechanger.meter import LevelMeter
 from voicechanger.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
@@ -44,11 +43,16 @@ def build_control_view(
     page: ft.Page,
     state: GuiState,
     *,
-    pipeline: AudioPipeline | None = None,
+    ipc_client: IpcClient,
     registry: ProfileRegistry | None = None,
+    start_service: Callable[[], Awaitable[bool]] | None = None,
+    stop_service: Callable[[], Awaitable[None]] | None = None,
 ) -> ft.Control:
     """Build and return the Control view layout."""
-    return ControlView(page, state, pipeline=pipeline, registry=registry)
+    return ControlView(
+        page, state, ipc_client=ipc_client, registry=registry,
+        start_service=start_service, stop_service=stop_service,
+    )
 
 
 class ControlView(ft.Column):
@@ -59,18 +63,26 @@ class ControlView(ft.Column):
         page: ft.Page,
         state: GuiState,
         *,
-        pipeline: AudioPipeline | None = None,
+        ipc_client: IpcClient,
         registry: ProfileRegistry | None = None,
+        persist_settings: Any | None = None,
+        start_service: Callable[[], Awaitable[bool]] | None = None,
+        stop_service: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         super().__init__(expand=True, spacing=16, scroll=ft.ScrollMode.AUTO)
         self._page = page
         self._state = state
-        self._pipeline = pipeline or AudioPipeline()
+        self._ipc = ipc_client
         self._registry = registry
+        self._persist_settings = persist_settings
+        self._start_service = start_service
+        self._stop_service = stop_service
         self._device_monitor = DeviceMonitor()
+        self._input_tree: dict[str, list[tuple[str, str]]] = {}
+        self._output_tree: dict[str, list[tuple[str, str]]] = {}
         self._status_polling = False
         self._level_polling = False
-        self._ipc_client: Any = None
+        self._level_meter = LevelMeter()
 
         self._build_ui()
 
@@ -112,8 +124,18 @@ class ControlView(ft.Column):
         )
 
         # ── Device selection ──
-        self._input_dropdown = ft.Dropdown(label="Input Device", expand=True)
-        self._output_dropdown = ft.Dropdown(label="Output Device", expand=True)
+        self._input_card_dropdown = ft.Dropdown(
+            label="Input Card",
+            expand=True,
+            on_select=lambda _e: self._on_card_change("input"),
+        )
+        self._input_sub_dropdown = ft.Dropdown(label="Input Device", expand=True, visible=False)
+        self._output_card_dropdown = ft.Dropdown(
+            label="Output Card",
+            expand=True,
+            on_select=lambda _e: self._on_card_change("output"),
+        )
+        self._output_sub_dropdown = ft.Dropdown(label="Output Device", expand=True, visible=False)
         self._refresh_btn = ft.IconButton(
             icon=ft.Icons.REFRESH, tooltip="Refresh devices", on_click=self._on_refresh_devices
         )
@@ -125,7 +147,15 @@ class ControlView(ft.Column):
                     [
                         ft.Text("AUDIO DEVICES", weight=ft.FontWeight.BOLD, size=16),
                         ft.Row(
-                            [self._input_dropdown, self._output_dropdown, self._refresh_btn],
+                            [
+                                self._input_card_dropdown,
+                                self._output_card_dropdown,
+                                self._refresh_btn,
+                            ],
+                            spacing=8,
+                        ),
+                        ft.Row(
+                            [self._input_sub_dropdown, self._output_sub_dropdown],
                             spacing=8,
                         ),
                     ],
@@ -157,26 +187,18 @@ class ControlView(ft.Column):
             ),
         )
 
-        # ── Level meters ──
-        self._input_meter = ft.ProgressBar(value=0, width=300, color=ft.Colors.GREEN)
-        self._output_meter = ft.ProgressBar(value=0, width=300, color=ft.Colors.GREEN)
-        self._input_db_label = ft.Text("-∞ dB", size=11, width=60)
-        self._output_db_label = ft.Text("-∞ dB", size=11, width=60)
+        # ── Level meter ──
+        self._mic_meter = ft.ProgressBar(value=0, width=300, color=ft.Colors.GREEN)
+        self._mic_db_label = ft.Text("-∞ dB", size=11, width=60)
 
         meter_card = ft.Card(
             content=ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text("LEVEL METERS", weight=ft.FontWeight.BOLD, size=16),
+                        ft.Text("MIC LEVEL", weight=ft.FontWeight.BOLD, size=16),
                         ft.Row([
-                            ft.Text("Input:", width=60),
-                            self._input_meter,
-                            self._input_db_label,
-                        ]),
-                        ft.Row([
-                            ft.Text("Output:", width=60),
-                            self._output_meter,
-                            self._output_db_label,
+                            self._mic_meter,
+                            self._mic_db_label,
                         ]),
                     ],
                     spacing=8,
@@ -184,14 +206,6 @@ class ControlView(ft.Column):
                 padding=16,
             ),
         )
-
-        # ── Adapt for remote mode ──
-        if self._state.mode == PipelineMode.REMOTE:
-            self._start_btn.disabled = True
-            self._start_btn.tooltip = "Service is running externally"
-            self._stop_btn.disabled = True
-            self._stop_btn.tooltip = "Stop the service via CLI or systemd"
-            self._start_status_polling()
 
         self.controls = [service_card, device_card, ft.Row([status_card, meter_card], spacing=16)]
 
@@ -207,17 +221,104 @@ class ControlView(ft.Column):
     # ── Device list ──
 
     def _refresh_device_lists(self) -> None:
-        inputs = self._device_monitor.list_input_devices()
-        outputs = self._device_monitor.list_output_devices()
+        self._input_tree = self._device_monitor.input_device_tree()
+        self._output_tree = self._device_monitor.output_device_tree()
 
-        self._input_dropdown.options = [ft.dropdown.Option("default")] + [
-            ft.dropdown.Option(f"hw:{d['card']},{d['device']}") for d in inputs
+        default_label = self._device_monitor.DEFAULT_LABEL
+
+        input_cards = [default_label, *self._input_tree.keys()]
+        output_cards = [default_label, *self._output_tree.keys()]
+
+        self._input_card_dropdown.options = [
+            ft.dropdown.Option(key=card, text=card) for card in input_cards
         ]
-        self._output_dropdown.options = [ft.dropdown.Option("default")] + [
-            ft.dropdown.Option(f"hw:{d['card']},{d['device']}") for d in outputs
+        self._output_card_dropdown.options = [
+            ft.dropdown.Option(key=card, text=card) for card in output_cards
         ]
-        self._input_dropdown.value = self._state.selected_input_device
-        self._output_dropdown.value = self._state.selected_output_device
+
+        self._input_card_dropdown.value = default_label
+        self._output_card_dropdown.value = default_label
+        self._on_card_change("input")
+        self._on_card_change("output")
+
+        self._apply_saved_device_selection("input", self._state.selected_input_device)
+        self._apply_saved_device_selection("output", self._state.selected_output_device)
+
+    def _apply_saved_device_selection(self, direction: str, selected_device: str) -> None:
+        default_label = self._device_monitor.DEFAULT_LABEL
+        if not selected_device or selected_device == "default":
+            return
+
+        if direction == "input":
+            card_dropdown = self._input_card_dropdown
+            tree = self._input_tree
+            default_name = self._device_monitor.default_input_name()
+        else:
+            card_dropdown = self._output_card_dropdown
+            tree = self._output_tree
+            default_name = self._device_monitor.default_output_name()
+
+        if selected_device == default_name:
+            card_dropdown.value = default_label
+            self._on_card_change(direction)
+            return
+
+        for card_name, entries in tree.items():
+            for _sub_label, raw_name in entries:
+                if raw_name == selected_device:
+                    card_dropdown.value = card_name
+                    self._on_card_change(direction)
+                    if direction == "input":
+                        self._input_sub_dropdown.value = raw_name
+                    else:
+                        self._output_sub_dropdown.value = raw_name
+                    return
+
+    def _on_card_change(self, direction: str) -> None:
+        default_label = self._device_monitor.DEFAULT_LABEL
+
+        if direction == "input":
+            card_dropdown = self._input_card_dropdown
+            sub_dropdown = self._input_sub_dropdown
+            tree = self._input_tree
+        else:
+            card_dropdown = self._output_card_dropdown
+            sub_dropdown = self._output_sub_dropdown
+            tree = self._output_tree
+
+        card_value = card_dropdown.value or default_label
+        if card_value == default_label or card_value not in tree:
+            sub_dropdown.options = []
+            sub_dropdown.value = None
+            sub_dropdown.visible = False
+            if self._page:
+                self._page.update()
+            return
+
+        entries = tree[card_value]
+        sub_dropdown.options = [
+            ft.dropdown.Option(key=raw_name, text=sub_label)
+            for sub_label, raw_name in entries
+        ]
+        sub_dropdown.value = entries[0][1] if entries else None
+        sub_dropdown.visible = True
+        if self._page:
+            self._page.update()
+
+    def _resolve_device(self, direction: str) -> str:
+        default_label = self._device_monitor.DEFAULT_LABEL
+
+        if direction == "input":
+            card_value = self._input_card_dropdown.value or default_label
+            sub_value = self._input_sub_dropdown.value
+        else:
+            card_value = self._output_card_dropdown.value or default_label
+            sub_value = self._output_sub_dropdown.value
+
+        if card_value == default_label:
+            return "default"
+
+        return sub_value or "default"
 
     def _on_refresh_devices(self, _e: ft.ControlEvent | None = None) -> None:
         self._refresh_device_lists()
@@ -226,51 +327,47 @@ class ControlView(ft.Column):
     # ── Start / Stop ──
 
     def _on_start(self, _e: ft.ControlEvent | None = None) -> None:
-        if self._state.mode == PipelineMode.REMOTE:
+        """Spawn the service subprocess and connect IPC."""
+        if self._start_service is None:
             return
 
-        profile_name = self._profile_dropdown.value or "clean"
-        profile: Profile | None = None
-        if self._registry:
-            profile = self._registry.get(profile_name)
-        if profile is None:
-            profile = Profile(name="clean", effects=[])
-
-        input_dev = self._input_dropdown.value or "default"
-        output_dev = self._output_dropdown.value or "default"
-
-        try:
-            self._pipeline.start(
-                profile,
-                sample_rate=self._state.sample_rate,
-                buffer_size=self._state.buffer_size,
-                input_device=input_dev,
-                output_device=output_dev,
-            )
-            self._state.pipeline_running = True
-            self._state.pipeline_state = self._pipeline.state.value
-            self._state.active_profile_name = profile_name
-            self._start_btn.disabled = True
-            self._stop_btn.disabled = False
-            self._update_status_display()
-            self.start_level_polling()
-        except Exception:
-            logger.error("Failed to start pipeline", exc_info=True)
-
-        self._page.update()
-
-    def _on_stop(self, _e: ft.ControlEvent | None = None) -> None:
-        if self._state.mode == PipelineMode.REMOTE:
-            return
-
-        self._pipeline.stop()
-        self._state.pipeline_running = False
-        self._state.pipeline_state = "STOPPED"
-        self._start_btn.disabled = False
-        self._stop_btn.disabled = True
-        self.stop_level_polling()
+        self._start_btn.disabled = True
+        self._state.pipeline_state = "STARTING"
         self._update_status_display()
         self._page.update()
+
+        async def _do_start() -> None:
+            ok = await self._start_service()
+            if ok:
+                self._state.pipeline_running = True
+                self._state.pipeline_state = "RUNNING"
+                self._stop_btn.disabled = False
+                self._start_status_polling()
+                self.start_level_polling()
+            else:
+                self._state.pipeline_state = "ERROR"
+                self._start_btn.disabled = False
+            self._update_status_display()
+            self._page.update()
+
+        self._page.run_task(_do_start)
+
+    def _on_stop(self, _e: ft.ControlEvent | None = None) -> None:
+        self._stop_btn.disabled = True
+        self._page.update()
+
+        async def _do_stop() -> None:
+            if self._stop_service is not None:
+                await self._stop_service()
+            self._status_polling = False
+            self.stop_level_polling()
+            self._state.pipeline_running = False
+            self._state.pipeline_state = "STOPPED"
+            self._start_btn.disabled = False
+            self._update_status_display()
+            self._page.update()
+
+        self._page.run_task(_do_stop)
 
     # ── Monitor toggle ──
 
@@ -278,50 +375,38 @@ class ControlView(ft.Column):
         enabled = e.control.value
         self._state.monitor_enabled = enabled
 
-        if self._state.mode == PipelineMode.EMBEDDED:
-            self._pipeline.set_monitor_enabled(enabled)
-        elif self._state.mode == PipelineMode.REMOTE and self._ipc_client:
+        async def _set() -> None:
+            await self._ipc.set_monitor(enabled)
 
-            async def _set() -> None:
-                await self._ipc_client.set_monitor(enabled)
+        self._page.run_task(_set)
 
-            asyncio.ensure_future(_set())
-
-    # ── Status polling (remote mode) ──
+    # ── Status polling ──
 
     def _start_status_polling(self) -> None:
         if self._status_polling:
             return
         self._status_polling = True
 
-        def _poll() -> None:
+        async def _poll() -> None:
             while self._status_polling:
-                if self._ipc_client:
+                try:
+                    result = await self._ipc.get_status()
+                    if result.get("ok"):
+                        data = result["data"]
+                        self._state.pipeline_state = data.get("state", "UNKNOWN")
+                        self._state.active_profile_name = data.get("active_profile", "")
+                        self._state.uptime_seconds = data.get("uptime_seconds", 0)
+                        self._state.monitor_enabled = data.get("monitor_enabled", True)
+                        self._state.pipeline_running = data.get("state") == "RUNNING"
 
-                    async def _fetch() -> None:
-                        result = await self._ipc_client.get_status()
-                        if result.get("ok"):
-                            data = result["data"]
-                            self._state.pipeline_state = data.get("state", "UNKNOWN")
-                            self._state.active_profile_name = data.get("active_profile", "")
-                            self._state.uptime_seconds = data.get("uptime_seconds", 0)
-                            self._state.monitor_enabled = data.get("monitor_enabled", True)
-                            self._state.pipeline_running = data.get("state") == "RUNNING"
-                            self._update_status_display()
-                            self._page.update()
+                        self._stop_btn.disabled = not self._state.pipeline_running
+                        self._update_status_display()
+                        self._page.update()
+                except Exception:
+                    logger.debug("Status poll failed", exc_info=True)
+                await asyncio.sleep(STATUS_POLL_INTERVAL)
 
-                    try:
-                        loop = asyncio.get_event_loop()
-                        if loop.is_running():
-                            asyncio.ensure_future(_fetch())
-                        else:
-                            loop.run_until_complete(_fetch())
-                    except Exception:
-                        logger.debug("Status poll failed", exc_info=True)
-                time.sleep(STATUS_POLL_INTERVAL)
-
-        thread = threading.Thread(target=_poll, daemon=True)
-        thread.start()
+        self._page.run_task(_poll)
 
     # ── Status display ──
 
@@ -338,26 +423,19 @@ class ControlView(ft.Column):
     # ── Level meter polling ──
 
     def start_level_polling(self) -> None:
-        """Start async level meter polling at ~60ms interval (≥15fps)."""
+        """Start OS-level metering and async UI updates at ~60ms."""
         if self._level_polling:
             return
+        self._level_meter.start()
         self._level_polling = True
 
         async def _poll_levels() -> None:
             while self._level_polling:
-                if self._state.mode == PipelineMode.EMBEDDED:
-                    in_lvl = self._pipeline.input_level
-                    out_lvl = self._pipeline.output_level
-                else:
-                    in_lvl = self._state.input_level
-                    out_lvl = self._state.output_level
+                lvl = self._level_meter.input_level
 
-                self._input_meter.value = in_lvl
-                self._output_meter.value = out_lvl
-                self._input_meter.color = _level_color(in_lvl)
-                self._output_meter.color = _level_color(out_lvl)
-                self._input_db_label.value = _level_to_db(in_lvl)
-                self._output_db_label.value = _level_to_db(out_lvl)
+                self._mic_meter.value = lvl
+                self._mic_meter.color = _level_color(lvl)
+                self._mic_db_label.value = _level_to_db(lvl)
 
                 import contextlib
 
@@ -369,7 +447,10 @@ class ControlView(ft.Column):
 
     def stop_level_polling(self) -> None:
         self._level_polling = False
+        self._level_meter.stop()
 
-    def set_ipc_client(self, client: Any) -> None:
-        """Set the IPC client for remote mode operations."""
-        self._ipc_client = client
+    def shutdown(self) -> None:
+        """Stop background polling during GUI shutdown."""
+        self._status_polling = False
+        self.stop_level_polling()
+        self._level_meter.stop()

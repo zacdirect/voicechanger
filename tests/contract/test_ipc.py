@@ -257,6 +257,27 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
+    @patch("voicechanger.audio._open_stream")
+    def test_shutdown(
+        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+    ) -> None:
+        mock_open.return_value = MagicMock()
+        service, socket_path = service_setup
+
+        thread = threading.Thread(target=service.run, daemon=True)
+        thread.start()
+        time.sleep(0.3)
+
+        try:
+            resp = _send_ipc(socket_path, "shutdown")
+            assert resp["ok"] is True
+            assert resp["data"]["shutting_down"] is True
+            thread.join(timeout=3)
+            assert not thread.is_alive()
+        finally:
+            service._shutdown_event.set()
+            thread.join(timeout=3)
+
 
 class TestIPCErrors:
     """Test error handling in IPC protocol."""

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from voicechanger.config import load_config
+from voicechanger.config import Config, load_config, save_config
 
 
 class TestConfigLoading:
@@ -73,3 +73,21 @@ class TestConfigPaths:
         config = load_config(config_toml)
         assert str(tmp_profiles["builtin"]) in config.profiles.builtin_dir
         assert str(tmp_profiles["user"]) in config.profiles.user_dir
+
+
+class TestConfigPersistence:
+    """Test persisted config round-trips shared settings."""
+
+    def test_save_and_reload_roundtrip(self, tmp_path: Path) -> None:
+        path = tmp_path / "voicechanger.toml"
+        config = Config()
+        config.profiles.active_profile = "high-pitched"
+        config.audio.input_device = "PipeWire Sound Server"
+        config.audio.output_device = "USB C Earbuds, USB Audio; Front output / input"
+
+        save_config(path, config)
+        reloaded = load_config(path)
+
+        assert reloaded.profiles.active_profile == "high-pitched"
+        assert reloaded.audio.input_device == "PipeWire Sound Server"
+        assert reloaded.audio.output_device == "USB C Earbuds, USB Audio; Front output / input"

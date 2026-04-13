@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -33,14 +34,21 @@ class ToolsView(ft.Column):
         self._input_path: str | None = None
         self._output_path: str | None = None
 
-        self._input_picker = ft.FilePicker()
-        self._output_picker = ft.FilePicker()
-
         self._build_ui()
 
     def _build_ui(self) -> None:
-        self._input_label = ft.Text("No input file selected", italic=True)
-        self._output_label = ft.Text("No output file selected", italic=True)
+        self._input_path_field = ft.TextField(
+            label="Input WAV path",
+            hint_text="/path/to/input.wav",
+            expand=True,
+            on_change=lambda e: setattr(self, "_input_path", e.control.value),
+        )
+        self._output_path_field = ft.TextField(
+            label="Output WAV path",
+            hint_text="/path/to/output.wav",
+            expand=True,
+            on_change=lambda e: setattr(self, "_output_path", e.control.value),
+        )
 
         self._btn_pick_input = ft.ElevatedButton(
             "Select Input File", icon=ft.Icons.FOLDER_OPEN,
@@ -64,49 +72,59 @@ class ToolsView(ft.Column):
 
         self.controls = [
             ft.Text("Offline Processing", size=20, weight=ft.FontWeight.BOLD),
-            ft.Row([self._btn_pick_input, self._input_label], spacing=8),
-            ft.Row([self._btn_pick_output, self._output_label], spacing=8),
+            ft.Row([self._btn_pick_input, self._input_path_field], spacing=8),
+            ft.Row([self._btn_pick_output, self._output_path_field], spacing=8),
             self._profile_dropdown,
             ft.Divider(),
             ft.Row([self._btn_process, self._progress], spacing=8),
             self._status_text,
-            self._input_picker,
-            self._output_picker,
         ]
 
-    def _on_pick_input(self, _e: ft.ControlEvent) -> None:
-        if self.page:
-            files = self._input_picker.pick_files(
-                dialog_title="Select input audio file",
-                allowed_extensions=["wav"],
-                allow_multiple=False,
-            )
-            if files:
-                self._input_path = files[0].path
-                self._input_label.value = Path(self._input_path).name
-                self.page.update()
+    async def _on_pick_input(self, _e: ft.ControlEvent) -> None:
+        if not self.page:
+            return
+        await asyncio.sleep(0)
+        files = await ft.FilePicker().pick_files(
+            dialog_title="Select input audio file",
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=["wav"],
+            allow_multiple=False,
+        )
+        if files:
+            self._input_path = files[0].path
+            self._input_path_field.value = self._input_path
+            self.page.update()
 
-    def _on_pick_output(self, _e: ft.ControlEvent) -> None:
-        if self.page:
-            path = self._output_picker.save_file(
-                dialog_title="Select output file",
-                file_name="output.wav",
-                allowed_extensions=["wav"],
-            )
-            if path:
-                self._output_path = path
-                self._output_label.value = Path(self._output_path).name
-                self.page.update()
+    async def _on_pick_output(self, _e: ft.ControlEvent) -> None:
+        if not self.page:
+            return
+        await asyncio.sleep(0)
+        path = await ft.FilePicker().save_file(
+            dialog_title="Select output file",
+            file_name="output.wav",
+            file_type=ft.FilePickerFileType.CUSTOM,
+            allowed_extensions=["wav"],
+        )
+        if path:
+            self._output_path = path
+            self._output_path_field.value = self._output_path
+            self.page.update()
 
     def _on_process(self, _e: ft.ControlEvent) -> None:
-        if not self._input_path:
+        input_path = (self._input_path_field.value or self._input_path or "").strip()
+        output_path = (self._output_path_field.value or self._output_path or "").strip()
+
+        if not input_path:
             if self._show_snackbar:
                 self._show_snackbar("Select an input file first", error=True)
             return
-        if not self._output_path:
+        if not output_path:
             if self._show_snackbar:
                 self._show_snackbar("Select an output file first", error=True)
             return
+
+        self._input_path = input_path
+        self._output_path = output_path
 
         profile_name = self._profile_dropdown.value
         if not profile_name or not self._registry:
