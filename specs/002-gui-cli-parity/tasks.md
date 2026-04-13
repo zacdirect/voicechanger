@@ -18,7 +18,7 @@
 
 **Purpose**: Create package structure for the new GUI views subpackage
 
-- [ ] T001 Create gui/views/ package with __init__.py in src/voicechanger/gui/views/__init__.py
+- [x] T001 Create gui/views/ package with __init__.py in src/voicechanger/gui/views/__init__.py
 
 ---
 
@@ -32,15 +32,15 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T002 [P] Write unit tests for PipelineMode, GuiState, EditingProfile, and generate_draft_name() in tests/unit/test_gui_state.py
-- [ ] T003 [P] Write unit tests for IpcClient (connect, send_command, 5 base commands, error handling, close) in tests/unit/test_ipc_client.py
+- [x] T002 [P] Write unit tests for PipelineMode, GuiState, EditingProfile, and generate_draft_name() in tests/unit/test_gui_state.py
+- [x] T003 [P] Write unit tests for IpcClient (connect, send_command, 5 base commands, error handling, close) in tests/unit/test_ipc_client.py
 
 ### Implementation for Foundation
 
-- [ ] T004 [P] Implement PipelineMode enum, EditingProfile dataclass, GuiState dataclass, and generate_draft_name() in src/voicechanger/gui/state.py
-- [ ] T005 [P] Implement IpcClient async wrapper (connect, send_command, switch_profile, list_profiles, get_profile, get_status, reload_profiles, close) in src/voicechanger/gui/ipc_client.py
-- [ ] T006 Rewrite app.py as NavigationRail shell with 4-destination view routing (Control, Profiles, Editor, Tools) in src/voicechanger/gui/app.py
-- [ ] T007 Update launch_gui() with embedded/remote mode detection (probe socket on startup) in src/voicechanger/gui/__init__.py
+- [x] T004 [P] Implement PipelineMode enum, EditingProfile dataclass, GuiState dataclass, and generate_draft_name() in src/voicechanger/gui/state.py
+- [x] T005 [P] Implement IpcClient async wrapper (connect, send_command, switch_profile, list_profiles, get_profile, get_status, reload_profiles, close) in src/voicechanger/gui/ipc_client.py
+- [x] T006 Rewrite app.py as NavigationRail shell with 4-destination view routing (Control, Profiles, Editor, Tools) in src/voicechanger/gui/app.py
+- [x] T007 Update launch_gui() with embedded/remote mode detection (probe socket on startup) in src/voicechanger/gui/__init__.py
 
 **Checkpoint**: Foundation ready — GuiState, IpcClient, and NavigationRail shell are functional. User story implementation can begin.
 
@@ -56,20 +56,20 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T008 [P] [US1] Write unit tests for AudioPipeline.set_monitor_enabled() in tests/unit/test_audio_pipeline.py
-- [ ] T009 [P] [US1] Write unit tests for _cmd_set_monitor IPC handler in tests/unit/test_service.py (new file)
-- [ ] T010 [P] [US1] Write contract test for set_monitor IPC command round-trip in tests/contract/test_ipc.py
-- [ ] T011 [P] [US1] Write integration test for GUI↔Service remote control flow (connect, get_status, set_monitor) in tests/integration/test_gui_ipc.py (new file)
+- [x] T008 [P] [US1] Write unit tests for AudioPipeline.set_monitor_enabled() in tests/unit/test_audio_pipeline.py
+- [x] T009 [P] [US1] Write unit tests for _cmd_set_monitor IPC handler in tests/unit/test_service.py (new file)
+- [x] T010 [P] [US1] Write contract test for set_monitor IPC command round-trip in tests/contract/test_ipc.py
+- [x] T011 [P] [US1] Write integration test for GUI↔Service remote control flow (connect, get_status, set_monitor) in tests/integration/test_gui_ipc.py (new file)
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Add set_monitor_enabled(enabled: bool) method to AudioPipeline (output mute gain toggle) in src/voicechanger/audio.py
-- [ ] T013 [US1] Implement _cmd_set_monitor IPC handler and add monitor_enabled field to _cmd_get_status response in src/voicechanger/service.py
-- [ ] T014 [US1] Add set_monitor() method to IpcClient in src/voicechanger/gui/ipc_client.py
-- [ ] T015 [US1] Implement Control view layout (start/stop buttons, profile dropdown, monitor toggle, status area placeholder) in src/voicechanger/gui/views/control.py
-- [ ] T016 [US1] Implement start/stop pipeline actions (embedded: AudioPipeline.start/stop; remote: display "Service already running" info) in src/voicechanger/gui/views/control.py
-- [ ] T017 [US1] Implement monitor toggle action (embedded: pipeline.set_monitor_enabled; remote: IpcClient.set_monitor) in src/voicechanger/gui/views/control.py
-- [ ] T018 [US1] Implement status polling loop (remote: IpcClient.get_status every 2s; embedded: pipeline.get_status periodic read) in src/voicechanger/gui/views/control.py
+- [x] T012 [P] [US1] Add set_monitor_enabled(enabled: bool) method to AudioPipeline (output mute gain toggle) in src/voicechanger/audio.py
+- [x] T013 [US1] Implement _cmd_set_monitor IPC handler and add monitor_enabled field to _cmd_get_status response in src/voicechanger/service.py
+- [x] T014 [US1] Add set_monitor() method to IpcClient in src/voicechanger/gui/ipc_client.py
+- [x] T015 [US1] Implement Control view layout (start/stop buttons, profile dropdown, monitor toggle, status area placeholder) in src/voicechanger/gui/views/control.py
+- [x] T016 [US1] Implement start/stop pipeline actions (embedded: AudioPipeline.start/stop; remote: display "Service already running" info) in src/voicechanger/gui/views/control.py
+- [x] T017 [US1] Implement monitor toggle action (embedded: pipeline.set_monitor_enabled; remote: IpcClient.set_monitor) in src/voicechanger/gui/views/control.py
+- [x] T018 [US1] Implement status polling loop (remote: IpcClient.get_status every 2s; embedded: pipeline.get_status periodic read) in src/voicechanger/gui/views/control.py
 
 **Checkpoint**: User can start/stop pipeline from GUI, toggle monitor, and GUI auto-detects a running service via IPC.
 
@@ -85,17 +85,17 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T019 [P] [US2] Write unit tests for _cmd_set_device IPC handler (validate, restart, fallback) in tests/unit/test_service.py
-- [ ] T020 [P] [US2] Write contract test for set_device IPC command round-trip in tests/contract/test_ipc.py
-- [ ] T021 [P] [US2] Write unit tests for device dropdown rendering and device-unavailable fallback logic in tests/unit/test_gui.py
+- [x] T019 [P] [US2] Write unit tests for _cmd_set_device IPC handler (validate, restart, fallback) in tests/unit/test_service.py
+- [x] T020 [P] [US2] Write contract test for set_device IPC command round-trip in tests/contract/test_ipc.py
+- [x] T021 [P] [US2] Write unit tests for device dropdown rendering and device-unavailable fallback logic in tests/unit/test_gui.py
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Implement _cmd_set_device IPC handler (validate device, stop pipeline, restart with new device, fallback on failure) in src/voicechanger/service.py
-- [ ] T023 [US2] Add set_device() method to IpcClient in src/voicechanger/gui/ipc_client.py
-- [ ] T024 [US2] Implement device enumeration dropdowns (input/output) with refresh button using DeviceMonitor in src/voicechanger/gui/views/control.py
-- [ ] T025 [US2] Implement device change action (embedded: store in GuiState, apply on start; remote: IpcClient.set_device) in src/voicechanger/gui/views/control.py
-- [ ] T026 [US2] Implement device-unavailable fallback (fall back to system default, show notification) in src/voicechanger/gui/views/control.py
+- [x] T022 [US2] Implement _cmd_set_device IPC handler (validate device, stop pipeline, restart with new device, fallback on failure) in src/voicechanger/service.py
+- [x] T023 [US2] Add set_device() method to IpcClient in src/voicechanger/gui/ipc_client.py
+- [x] T024 [US2] Implement device enumeration dropdowns (input/output) with refresh button using DeviceMonitor in src/voicechanger/gui/views/control.py
+- [x] T025 [US2] Implement device change action (embedded: store in GuiState, apply on start; remote: IpcClient.set_device) in src/voicechanger/gui/views/control.py
+- [x] T026 [US2] Implement device-unavailable fallback (fall back to system default, show notification) in src/voicechanger/gui/views/control.py
 
 **Checkpoint**: User can select input/output devices from dropdowns and change devices during operation in both embedded and remote modes.
 
@@ -111,23 +111,23 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T027 [P] [US3] Write unit tests for ProfileRegistry.update() in tests/unit/test_registry.py
-- [ ] T028 [P] [US3] Write unit tests for Profiles view actions (activate, delete, export, import) in tests/unit/test_gui.py
-- [ ] T029 [P] [US3] Write unit tests for Editor view save logic and builtin auto-fork behavior in tests/unit/test_gui.py
-- [ ] T030 [P] [US3] Write contract test for Profiles view layout and actions in tests/contract/test_gui_views.py (new file)
-- [ ] T031 [P] [US3] Write contract test for Editor view layout and actions in tests/contract/test_gui_views.py
+- [x] T027 [P] [US3] Write unit tests for ProfileRegistry.update() in tests/unit/test_registry.py
+- [x] T028 [P] [US3] Write unit tests for Profiles view actions (activate, delete, export, import) in tests/unit/test_gui.py
+- [x] T029 [P] [US3] Write unit tests for Editor view save logic and builtin auto-fork behavior in tests/unit/test_gui.py
+- [x] T030 [P] [US3] Write contract test for Profiles view layout and actions in tests/contract/test_gui_views.py (new file)
+- [x] T031 [P] [US3] Write contract test for Editor view layout and actions in tests/contract/test_gui_views.py
 
 ### Implementation for User Story 3
 
-- [ ] T032 [US3] Implement ProfileRegistry.update(profile) method (atomic overwrite of user profile) in src/voicechanger/registry.py
-- [ ] T033 [US3] Implement Profiles view layout (grouped list by builtin/user, detail panel, action buttons) in src/voicechanger/gui/views/profiles.py
-- [ ] T034 [US3] Implement activate action (embedded: pipeline.switch_profile; remote: IpcClient.switch_profile) in src/voicechanger/gui/views/profiles.py
-- [ ] T035 [US3] Implement delete action with ft.AlertDialog confirmation (disable for builtins) in src/voicechanger/gui/views/profiles.py
-- [ ] T036 [P] [US3] Implement export and import actions using ft.FilePicker (save_file / pick_files → registry) in src/voicechanger/gui/views/profiles.py
-- [ ] T037 [US3] Refactor existing editor logic from app.py into Editor view (effect chain, sliders, preview) in src/voicechanger/gui/views/editor.py
-- [ ] T038 [US3] Implement builtin auto-fork (detect builtin → generate_draft_name → update name field → info banner) in src/voicechanger/gui/views/editor.py
-- [ ] T039 [US3] Implement save actions (Save: registry.update for user / registry.create for forked; Save As: name prompt + create) in src/voicechanger/gui/views/editor.py
-- [ ] T040 [US3] Implement "Edit" cross-view navigation (Profiles → Editor tab, load into EditingProfile state) in src/voicechanger/gui/views/profiles.py
+- [x] T032 [US3] Implement ProfileRegistry.update(profile) method (atomic overwrite of user profile) in src/voicechanger/registry.py
+- [x] T033 [US3] Implement Profiles view layout (grouped list by builtin/user, detail panel, action buttons) in src/voicechanger/gui/views/profiles.py
+- [x] T034 [US3] Implement activate action (embedded: pipeline.switch_profile; remote: IpcClient.switch_profile) in src/voicechanger/gui/views/profiles.py
+- [x] T035 [US3] Implement delete action with ft.AlertDialog confirmation (disable for builtins) in src/voicechanger/gui/views/profiles.py
+- [x] T036 [P] [US3] Implement export and import actions using ft.FilePicker (save_file / pick_files → registry) in src/voicechanger/gui/views/profiles.py
+- [x] T037 [US3] Refactor existing editor logic from app.py into Editor view (effect chain, sliders, preview) in src/voicechanger/gui/views/editor.py
+- [x] T038 [US3] Implement builtin auto-fork (detect builtin → generate_draft_name → update name field → info banner) in src/voicechanger/gui/views/editor.py
+- [x] T039 [US3] Implement save actions (Save: registry.update for user / registry.create for forked; Save As: name prompt + create) in src/voicechanger/gui/views/editor.py
+- [x] T040 [US3] Implement "Edit" cross-view navigation (Profiles → Editor tab, load into EditingProfile state) in src/voicechanger/gui/views/profiles.py
 
 **Checkpoint**: Full profile lifecycle works — browse, activate, create, edit in-place, auto-fork builtins, delete, export, import.
 
@@ -166,12 +166,12 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T046 [P] [US5] Write unit tests for status panel field rendering and update logic in tests/unit/test_gui.py
+- [x] T046 [P] [US5] Write unit tests for status panel field rendering and update logic in tests/unit/test_gui.py
 
 ### Implementation for User Story 5
 
-- [ ] T047 [US5] Implement status panel layout (profile, state, uptime, input/output device, sample rate, buffer size) in src/voicechanger/gui/views/control.py
-- [ ] T048 [US5] Wire status panel updates to polling loop (refresh within 1s on profile/device/state change) in src/voicechanger/gui/views/control.py
+- [x] T047 [US5] Implement status panel layout (profile, state, uptime, input/output device, sample rate, buffer size) in src/voicechanger/gui/views/control.py
+- [x] T048 [US5] Wire status panel updates to polling loop (refresh within 1s on profile/device/state change) in src/voicechanger/gui/views/control.py
 
 **Checkpoint**: Status dashboard shows all operational fields and updates promptly on state changes.
 
@@ -187,14 +187,14 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T049 [P] [US6] Write unit tests for Tools view processing actions and error handling in tests/unit/test_gui.py
-- [ ] T050 [P] [US6] Write contract test for Tools view layout in tests/contract/test_gui_views.py
+- [x] T049 [P] [US6] Write unit tests for Tools view processing actions and error handling in tests/unit/test_gui.py
+- [x] T050 [P] [US6] Write contract test for Tools view layout in tests/contract/test_gui_views.py
 
 ### Implementation for User Story 6
 
-- [ ] T051 [US6] Implement Tools view layout (input/output file pickers, profile dropdown, process button, progress bar) in src/voicechanger/gui/views/tools.py
-- [ ] T052 [US6] Implement offline processing action (page.run_thread → offline.process_file, progress updates) in src/voicechanger/gui/views/tools.py
-- [ ] T053 [US6] Implement error handling for missing/unreadable files and processing failures in src/voicechanger/gui/views/tools.py
+- [x] T051 [US6] Implement Tools view layout (input/output file pickers, profile dropdown, process button, progress bar) in src/voicechanger/gui/views/tools.py
+- [x] T052 [US6] Implement offline processing action (page.run_thread → offline.process_file, progress updates) in src/voicechanger/gui/views/tools.py
+- [x] T053 [US6] Implement error handling for missing/unreadable files and processing failures in src/voicechanger/gui/views/tools.py
 
 **Checkpoint**: Offline file processing works end-to-end with progress display and error feedback.
 
@@ -206,8 +206,8 @@
 
 **Independent Test**: Launch on desktop → verify full-space layout → optionally launch on Pi → verify core controls accessible.
 
-- [ ] T054 [US7] Set default window dimensions and add responsive expand/min_width constraints to NavigationRail shell in src/voicechanger/gui/app.py
-- [ ] T055 [US7] Add ft.ListView scroll wrappers to all 4 view modules for low-resolution display fallback in src/voicechanger/gui/views/
+- [x] T054 [US7] Set default window dimensions and add responsive expand/min_width constraints to NavigationRail shell in src/voicechanger/gui/app.py
+- [x] T055 [US7] Add ft.ListView scroll wrappers to all 4 view modules for low-resolution display fallback in src/voicechanger/gui/views/
 
 **Checkpoint**: GUI makes effective use of desktop space and remains functional at lower resolutions.
 
@@ -217,9 +217,9 @@
 
 **Purpose**: Validation, cleanup, and documentation
 
-- [ ] T056 [P] Update GUI usage instructions (launch, remote mode, views overview) in README.md
-- [ ] T057 Run quickstart.md validation (launch GUI, test all views, verify IPC remote control flow) in specs/002-gui-cli-parity/quickstart.md
-- [ ] T058 Run full test suite and linter to validate all tests pass and code quality in src/
+- [x] T056 [P] Update GUI usage instructions (launch, remote mode, views overview) in README.md
+- [x] T057 Run quickstart.md validation (launch GUI, test all views, verify IPC remote control flow) in specs/002-gui-cli-parity/quickstart.md
+- [x] T058 Run full test suite and linter to validate all tests pass and code quality in src/
 
 ---
 

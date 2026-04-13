@@ -172,6 +172,91 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
+    @patch("voicechanger.audio._open_stream")
+    def test_set_monitor(
+        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+    ) -> None:
+        mock_open.return_value = MagicMock()
+        service, socket_path = service_setup
+
+        thread = threading.Thread(target=service.run, daemon=True)
+        thread.start()
+        time.sleep(0.3)
+
+        try:
+            resp = _send_ipc(socket_path, "set_monitor", {"enabled": False})
+            assert resp["ok"] is True
+            assert resp["data"]["monitor_enabled"] is False
+
+            resp = _send_ipc(socket_path, "set_monitor", {"enabled": True})
+            assert resp["ok"] is True
+            assert resp["data"]["monitor_enabled"] is True
+        finally:
+            service._shutdown_event.set()
+            thread.join(timeout=3)
+
+    @patch("voicechanger.audio._open_stream")
+    def test_set_monitor_missing_param(
+        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+    ) -> None:
+        mock_open.return_value = MagicMock()
+        service, socket_path = service_setup
+
+        thread = threading.Thread(target=service.run, daemon=True)
+        thread.start()
+        time.sleep(0.3)
+
+        try:
+            resp = _send_ipc(socket_path, "set_monitor", {})
+            assert resp["ok"] is False
+            assert resp["error"]["code"] == "INVALID_PARAMS"
+        finally:
+            service._shutdown_event.set()
+            thread.join(timeout=3)
+
+    @patch("voicechanger.audio._open_stream")
+    def test_set_device(
+        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+    ) -> None:
+        mock_open.return_value = MagicMock()
+        service, socket_path = service_setup
+
+        thread = threading.Thread(target=service.run, daemon=True)
+        thread.start()
+        time.sleep(0.3)
+
+        try:
+            resp = _send_ipc(
+                socket_path, "set_device",
+                {"input_device": "hw:1,0", "output_device": "hw:2,0"},
+            )
+            assert resp["ok"] is True
+            assert resp["data"]["restarted"] is True
+            assert resp["data"]["input_device"] == "hw:1,0"
+            assert resp["data"]["output_device"] == "hw:2,0"
+        finally:
+            service._shutdown_event.set()
+            thread.join(timeout=3)
+
+    @patch("voicechanger.audio._open_stream")
+    def test_set_device_missing_params(
+        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+    ) -> None:
+        mock_open.return_value = MagicMock()
+        service, socket_path = service_setup
+
+        thread = threading.Thread(target=service.run, daemon=True)
+        thread.start()
+        time.sleep(0.3)
+
+        try:
+            resp = _send_ipc(socket_path, "set_device", {})
+            assert resp["ok"] is False
+            assert resp["error"]["code"] == "INVALID_PARAMS"
+        finally:
+            service._shutdown_event.set()
+            thread.join(timeout=3)
+
 
 class TestIPCErrors:
     """Test error handling in IPC protocol."""

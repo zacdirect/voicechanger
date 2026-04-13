@@ -185,3 +185,179 @@ class TestPreviewManager:
             mgr.start_preview([])
             profile = mock_start.call_args[0][0]
             assert profile.effects == []
+
+
+class TestEditorSaveLogic:
+    """Test editor save logic: build profile, auto-fork builtin detection."""
+
+    def test_build_profile_for_save(self) -> None:
+        """User profile save builds correct Profile."""
+        from voicechanger.gui.state import EditingProfile
+
+        editing = EditingProfile(
+            name="my-voice",
+            original_name="my-voice",
+            effects=[GuiEffectState(type="Gain", params={"gain_db": 3.0})],
+            author="tester",
+            description="My voice",
+        )
+        profile = build_profile_from_gui_state(
+            name=editing.name,
+            author=editing.author,
+            description=editing.description,
+            effects=editing.effects,
+        )
+        assert profile.name == "my-voice"
+        assert profile.author == "tester"
+        assert len(profile.effects) == 1
+
+    def test_builtin_fork_generates_new_name(self) -> None:
+        """Editing a builtin triggers auto-fork with generated name."""
+        from voicechanger.gui.state import EditingProfile, generate_draft_name
+
+        existing = ["clean", "high-pitched", "low-pitched"]
+        draft = generate_draft_name("clean", existing)
+        assert draft == "clean-custom-1"
+
+        editing = EditingProfile(
+            name=draft,
+            original_name="clean",
+            is_builtin_fork=True,
+            effects=[GuiEffectState(type="Gain", params={"gain_db": 0.0})],
+        )
+        profile = build_profile_from_gui_state(
+            name=editing.name,
+            author=editing.author,
+            description=editing.description,
+            effects=editing.effects,
+        )
+        assert profile.name == "clean-custom-1"
+        assert editing.is_builtin_fork is True
+
+    def test_fork_save_creates_via_registry(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        """Forked builtin saved via registry.create(), not update()."""
+        from voicechanger.registry import ProfileRegistry
+
+        registry = ProfileRegistry(
+            builtin_dir=builtin_profiles, user_dir=tmp_profiles["user"]
+        )
+        profile = build_profile_from_gui_state(
+            name="clean-custom-1",
+            author="",
+            description="",
+            effects=[GuiEffectState(type="Gain", params={"gain_db": 2.0})],
+        )
+        registry.create(profile)
+        assert registry.exists("clean-custom-1")
+        assert not registry.is_builtin("clean-custom-1")
+
+    def test_user_profile_save_uses_update(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        """Existing user profile saved via registry.update()."""
+        from voicechanger.registry import ProfileRegistry
+
+        registry = ProfileRegistry(
+            builtin_dir=builtin_profiles, user_dir=tmp_profiles["user"]
+        )
+        profile = Profile(name="my-voice", effects=[{"type": "Gain", "params": {"gain_db": 1.0}}])
+        registry.create(profile)
+
+        updated = build_profile_from_gui_state(
+            name="my-voice",
+            author="",
+            description="",
+            effects=[GuiEffectState(type="Gain", params={"gain_db": 5.0})],
+        )
+        registry.update(updated)
+        result = registry.get("my-voice")
+        assert result is not None
+        assert result.effects[0]["params"]["gain_db"] == 5.0
+
+
+class TestStatusPanelLogic:
+    """Test status panel field formatting logic."""
+
+    def test_uptime_formatting(self) -> None:
+        """Verify uptime display from seconds."""
+        from voicechanger.gui.state import GuiState
+
+        state = GuiState()
+        state.uptime_seconds = 3661  # 1h 1m 1s
+        mins, secs = divmod(state.uptime_seconds, 60)
+        hours, mins = divmod(mins, 60)
+        assert hours == 1
+        assert mins == 1
+        assert secs == 1
+
+    def test_level_color_thresholds(self) -> None:
+        """Verify level color logic: green < 0.7, yellow < 0.9, red >= 0.9."""
+        import flet as ft
+
+        from voicechanger.gui.views.control import _level_color
+
+        assert _level_color(0.0) == ft.Colors.GREEN
+        assert _level_color(0.5) == ft.Colors.GREEN
+        assert _level_color(0.7) == ft.Colors.YELLOW
+        assert _level_color(0.85) == ft.Colors.YELLOW
+        assert _level_color(0.9) == ft.Colors.RED
+        assert _level_color(1.0) == ft.Colors.RED
+
+    def test_level_to_db(self) -> None:
+        """Verify dB conversion."""
+        from voicechanger.gui.views.control import _level_to_db
+
+        assert _level_to_db(0.0) == "-∞ dB"
+        assert _level_to_db(1.0) == "0.0 dB"
+        # 0.5 → ~-6.0 dB
+        db_str = _level_to_db(0.5)
+        assert "dB" in db_str
+        val = float(db_str.replace(" dB", ""))
+        assert -7.0 < val < -5.0
+
+
+class TestOfflineToolsLogic:
+    """Test offline processing Tools view logic."""
+
+    def test_process_file_with_gain(self, tmp_path: Path) -> None:
+        """Process a simple WAV file through a gain-only profile."""
+        import wave
+
+        import numpy as np
+
+        from voicechanger.offline import process_file
+
+        # Create a simple test WAV
+        input_path = tmp_path / "input.wav"
+        output_path = tmp_path / "output.wav"
+        sample_rate = 44100
+        duration = 0.1
+        t = np.linspace(0, duration, int(sample_rate * duration), dtype=np.float32)
+        samples = (np.sin(2 * np.pi * 440 * t) * 0.5 * 32767).astype(np.int16)
+
+        with wave.open(str(input_path), "w") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(samples.tobytes())
+
+        profile = Profile(
+            name="gain-test", effects=[{"type": "Gain", "params": {"gain_db": 6.0}}]
+        )
+        process_file(profile, input_path, output_path)
+        assert output_path.exists()
+
+        with wave.open(str(output_path), "r") as wf:
+            assert wf.getnframes() > 0
+
+    def test_process_file_invalid_input(self, tmp_path: Path) -> None:
+        """Error on nonexistent input file."""
+        from voicechanger.offline import process_file
+
+        input_path = tmp_path / "nonexistent.wav"
+        output_path = tmp_path / "output.wav"
+        profile = Profile(name="gain-test", effects=[])
+        with pytest.raises(FileNotFoundError):
+            process_file(profile, input_path, output_path)

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import enum
 import logging
+import threading
 import warnings
 from typing import Any
+
+import numpy as np
 
 from voicechanger.effects import validate_effect
 from voicechanger.profile import Profile
@@ -78,6 +81,10 @@ class AudioPipeline:
         self._active_profile_name: str = ""
         self._sample_rate: int = 48000
         self._buffer_size: int = 256
+        self._monitor_enabled: bool = True
+        self._input_level: float = 0.0
+        self._output_level: float = 0.0
+        self._level_lock = threading.Lock()
 
     @property
     def state(self) -> PipelineState:
@@ -90,6 +97,34 @@ class AudioPipeline:
     @property
     def active_profile_name(self) -> str:
         return self._active_profile_name
+
+    @property
+    def monitor_enabled(self) -> bool:
+        return self._monitor_enabled
+
+    @property
+    def input_level(self) -> float:
+        with self._level_lock:
+            return self._input_level
+
+    @property
+    def output_level(self) -> float:
+        with self._level_lock:
+            return self._output_level
+
+    def update_levels(self, input_audio: np.ndarray, output_audio: np.ndarray) -> None:
+        """Update input/output RMS levels from audio buffers. Thread-safe."""
+        in_rms = float(np.sqrt(np.mean(input_audio.astype(np.float64) ** 2)))
+        out_rms = float(np.sqrt(np.mean(output_audio.astype(np.float64) ** 2)))
+        with self._level_lock:
+            self._input_level = min(1.0, in_rms)
+            self._output_level = min(1.0, out_rms)
+
+    def set_monitor_enabled(self, enabled: bool) -> None:
+        """Toggle output monitoring. Only takes effect while running."""
+        if self._state not in (PipelineState.RUNNING, PipelineState.DEGRADED):
+            return
+        self._monitor_enabled = enabled
 
     def start(
         self,
@@ -134,6 +169,9 @@ class AudioPipeline:
         self._plugins = []
         self._active_profile_name = ""
         self._state = PipelineState.STOPPED
+        with self._level_lock:
+            self._input_level = 0.0
+            self._output_level = 0.0
 
     def switch_profile(self, profile: Profile) -> None:
         """Switch to a different profile while running."""
@@ -178,4 +216,7 @@ class AudioPipeline:
             "plugin_count": len(self._plugins),
             "sample_rate": self._sample_rate,
             "buffer_size": self._buffer_size,
+            "monitor_enabled": self._monitor_enabled,
+            "input_level": self.input_level,
+            "output_level": self.output_level,
         }

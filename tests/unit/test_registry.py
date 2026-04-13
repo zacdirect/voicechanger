@@ -153,3 +153,66 @@ class TestBuiltinProtection:
         assert registry.is_builtin("clean")
         assert registry.is_builtin("high-pitched")
         assert not registry.is_builtin("nonexistent")
+
+
+class TestProfileUpdate:
+    """Test updating user profiles."""
+
+    def test_update_user_profile(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        registry = ProfileRegistry(
+            builtin_dir=builtin_profiles, user_dir=tmp_profiles["user"]
+        )
+        profile = Profile(name="my-voice", effects=[{"type": "Gain", "params": {"gain_db": 1.0}}])
+        registry.create(profile)
+
+        updated = Profile(
+            name="my-voice",
+            effects=[{"type": "Gain", "params": {"gain_db": 5.0}}],
+            author="tester",
+        )
+        registry.update(updated)
+
+        result = registry.get("my-voice")
+        assert result is not None
+        assert result.effects[0]["params"]["gain_db"] == 5.0
+        assert result.author == "tester"
+
+    def test_update_persists_to_disk(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        registry = ProfileRegistry(
+            builtin_dir=builtin_profiles, user_dir=tmp_profiles["user"]
+        )
+        profile = Profile(name="my-voice", effects=[{"type": "Gain", "params": {"gain_db": 1.0}}])
+        registry.create(profile)
+
+        updated = Profile(name="my-voice", effects=[{"type": "Gain", "params": {"gain_db": 9.0}}])
+        registry.update(updated)
+
+        # Reload from disk
+        registry2 = ProfileRegistry(
+            builtin_dir=builtin_profiles, user_dir=tmp_profiles["user"]
+        )
+        result = registry2.get("my-voice")
+        assert result is not None
+        assert result.effects[0]["params"]["gain_db"] == 9.0
+
+    def test_update_rejects_builtin(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        registry = ProfileRegistry(
+            builtin_dir=builtin_profiles, user_dir=tmp_profiles["user"]
+        )
+        with pytest.raises(ValueError, match="built-in"):
+            registry.update(Profile(name="clean", effects=[]))
+
+    def test_update_rejects_nonexistent(
+        self, builtin_profiles: Path, tmp_profiles: dict[str, Path]
+    ) -> None:
+        registry = ProfileRegistry(
+            builtin_dir=builtin_profiles, user_dir=tmp_profiles["user"]
+        )
+        with pytest.raises(ValueError, match="not found"):
+            registry.update(Profile(name="missing-profile", effects=[]))
