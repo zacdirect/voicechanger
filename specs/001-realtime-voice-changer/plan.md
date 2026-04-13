@@ -1,104 +1,111 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Realtime Voice Changer
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Branch**: `001-realtime-voice-changer` | **Date**: 2026-04-12 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from `/specs/001-realtime-voice-changer/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Build a headless, real-time voice changer for Raspberry Pi 3+ using Spotify's Pedalboard library. The system captures mic audio, applies a configurable chain of effects (pitch shift, gain, reverb, etc.) from character profiles, and plays transformed audio to a speaker — all within a 50 ms latency budget. A systemd-managed service runs headless on the Pi; a CLI communicates over a Unix domain socket for profile management; and a desktop GUI on the dev machine enables interactive profile authoring. Pedalboard's `AudioStream` provides real-time I/O, but its built-in `PitchShift` plugin introduces ~1–2s latency due to the `PrimeWithSilence` delay line (confirmed by upstream issue [#350](https://github.com/spotify/pedalboard/issues/350), still open). A `LivePitchShift` C++ patch that bypasses this delay is required
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.11+  
+**Primary Dependencies**: pedalboard (patched, vendored as submodule), numpy  
+**Storage**: JSON profile files on filesystem, TOML/INI for system configuration  
+**Testing**: pytest (unit, contract, integration); ruff (lint); mypy (types)  
+**Target Platform**: Raspberry Pi OS 64-bit (aarch64) deploy; Linux x86_64 dev/CI  
+**Project Type**: CLI service + desktop GUI authoring tool  
+**Performance Goals**: ≤50 ms end-to-end audio latency; profile switch ≤2 s  
+**Constraints**: <500 MB installed footprint; 8-hour unattended operation without dropouts; <50 MB memory growth  
+**Scale/Scope**: Single-user headless device; ~3 built-in profiles + community profiles; ~10 supported effect types
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+| # | Principle | Status | Evidence |
+|---|-----------|--------|----------|
+| I | Real-Time Audio First | PASS | AudioStream with 256-frame buffer @ 48 kHz (~5 ms); LivePitchShift patch for <100 ms pitch shift latency; ≤50 ms budget in SC-001 |
+| II | Headless by Design | PASS | systemd service, file-driven config, CLI-over-Unix-socket, structured logging; no GUI on Pi (FR-002, FR-012) |
+| III | Cross-Platform Build | PASS | Python code runs on x86_64 CI; C++ patch cross-compiled for aarch64 via GitHub Actions; submodule in `vendor/` (FR-015) |
+| IV | Test on Host, Deploy to Target | PASS | Audio device abstracted behind interfaces for mocks; hardware tests are optional manual gates only |
+| V | Minimal Dependencies | PASS | pedalboard (vendored), numpy, standard library; footprint target <500 MB |
+| VI | Reliability Over Features | PASS | Pass-through fallback (FR-003), systemd auto-restart (SC-007), graceful profile degradation |
+| VII | Test-First | PASS | pytest TDD workflow; contract tests for IPC, unit tests for profiles/pipeline, integration tests for audio chain |
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/001-realtime-voice-changer/
+├── plan.md              # This file
+├── research.md          # Phase 0: Technical research findings
+├── data-model.md        # Phase 1: Entity definitions & schemas
+├── quickstart.md        # Phase 1: Developer quickstart guide
+├── contracts/           # Phase 1: API & IPC contracts
+│   ├── cli.md           # CLI command interface
+│   └── ipc.md           # Unix domain socket protocol
+└── tasks.md             # Phase 2 output (created by /speckit.tasks)
 ```
 
 ### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
 src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+├── voicechanger/
+│   ├── __init__.py
+│   ├── __main__.py       # Entry point
+│   ├── audio.py          # AudioPipeline: AudioStream lifecycle, effect chain
+│   ├── effects.py        # Effect type registry, parameter validation
+│   ├── profile.py        # Profile model, serialization/deserialization
+│   ├── registry.py       # ProfileRegistry: discovery, built-in vs user
+│   ├── service.py        # Service daemon: Unix socket server, signal handling
+│   ├── cli.py            # CLI commands (click or argparse)
+│   ├── config.py         # System config loading (audio devices, paths)
+│   ├── device.py         # Audio device enumeration, polling, hot-switch
+│   └── gui/
+│       ├── __init__.py
+│       └── app.py        # Desktop authoring GUI (tkinter)
+└── py.typed
+
+native/
+├── README.md             # Patch rationale & build instructions
+└── patches/
+    └── 0001-add-LivePitchShift.patch
+
+vendor/
+└── pedalboard/           # Git submodule (Spotify pedalboard, patched)
 
 tests/
+├── conftest.py
+├── unit/
+│   ├── test_profile.py
+│   ├── test_registry.py
+│   ├── test_effects.py
+│   └── test_config.py
 ├── contract/
-├── integration/
-└── unit/
+│   ├── test_cli.py
+│   └── test_ipc.py
+└── integration/
+    ├── test_audio_pipeline.py
+    └── test_service.py
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
+profiles/
+├── builtin/
+│   ├── clean.json
+│   ├── high-pitched.json
+│   └── low-pitched.json
+└── user/                 # User-created profiles go here
 
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+.github/
+└── workflows/
+    ├── ci.yml            # Lint, type-check, pytest on x86_64
+    └── build-native.yml  # Cross-compile patched pedalboard for aarch64
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: Single-project layout per constitution Development Workflow section (`src/`, `tests/`, `native/`, `vendor/`). The `src/voicechanger/` package contains all Python source. Desktop GUI is a subpackage (`gui/`) rather than a separate project since it shares the same profile model and audio pipeline code. Profiles are stored outside `src/` as runtime data.
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+No constitution violations. All design choices align with the 7 principles.
