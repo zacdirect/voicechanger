@@ -72,6 +72,19 @@ class ProfileRegistry:
         path.unlink(missing_ok=True)
         del self._user[name]
 
+    def update(self, profile: Profile) -> None:
+        """Update an existing user profile (atomic overwrite)."""
+        if self.is_builtin(profile.name):
+            raise ValueError(
+                f"Cannot update built-in profile '{profile.name}'"
+            )
+        if profile.name not in self._user:
+            raise ValueError(f"Profile '{profile.name}' not found")
+
+        path = self._user_dir / f"{profile.name}.json"
+        profile.save(path)
+        self._user[profile.name] = profile
+
     def exists(self, name: str) -> bool:
         """Check if a profile exists."""
         return name in self._builtin or name in self._user

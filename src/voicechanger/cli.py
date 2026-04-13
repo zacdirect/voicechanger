@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
-from voicechanger.config import Config, load_config
+from voicechanger.config import Config, load_config, save_config
 from voicechanger.effects import EffectValidationError, validate_effect
 from voicechanger.profile import Profile, ProfileValidationError
 from voicechanger.registry import ProfileRegistry
@@ -82,6 +82,12 @@ def _build_parser() -> argparse.ArgumentParser:
     process_parser.add_argument("input_file", help="Input audio file")
     process_parser.add_argument("output_file", help="Output audio file")
     process_parser.add_argument("--profile", required=True, help="Profile to apply")
+
+    # monitor
+    monitor_parser = subparsers.add_parser("monitor", help="Toggle local audio monitoring")
+    monitor_parser.add_argument(
+        "state", choices=["on", "off"], help="Enable or disable local monitor output",
+    )
 
     # gui
     subparsers.add_parser("gui", help="Launch the profile authoring GUI")
@@ -230,16 +236,26 @@ def _cmd_profile_show(args: argparse.Namespace) -> int:
 def _cmd_profile_switch(args: argparse.Namespace) -> int:
     """Switch the active profile."""
     config = _get_config()
-    socket_path = _get_socket_path(config)
-    resp = _send_ipc_command(socket_path, "switch_profile", {"name": args.name})
-
-    if resp.get("ok"):
-        print(f"Switched to profile: {args.name}")
-        return 0
-    else:
-        error = resp.get("error", {})
-        print(f"Error: {error.get('message', 'Unknown error')}", file=sys.stderr)
+    registry = _get_registry(config)
+    if registry.get(args.name) is None:
+        print(f"Error: Profile '{args.name}' not found", file=sys.stderr)
         return 1
+
+    socket_path = _get_socket_path(config)
+    try:
+        resp = _send_ipc_command(socket_path, "switch_profile", {"name": args.name})
+        if not resp.get("ok"):
+            error = resp.get("error", {})
+            print(f"Error: {error.get('message', 'Unknown error')}", file=sys.stderr)
+            return 1
+        print(f"Switched to profile: {args.name}")
+    except SystemExit:
+        # Service is not running; still persist the requested default profile.
+        print(f"Service not running; set default profile to: {args.name}")
+
+    config.profiles.active_profile = args.name
+    save_config(Path("voicechanger.toml"), config)
+    return 0
 
 
 def _parse_effect_args(effect_args: list[list[str]]) -> list[dict[str, Any]]:
@@ -424,6 +440,23 @@ def _cmd_process(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_monitor(args: argparse.Namespace) -> int:
+    """Toggle local audio monitoring on the running service."""
+    config = _get_config()
+    socket_path = _get_socket_path(config)
+    enabled = args.state == "on"
+    resp = _send_ipc_command(socket_path, "set_monitor", {"enabled": enabled})
+
+    if not resp.get("ok"):
+        error = resp.get("error", {})
+        print(f"Error: {error.get('message', 'Unknown error')}", file=sys.stderr)
+        return 1
+
+    state_str = "on" if resp["data"]["monitor_enabled"] else "off"
+    print(f"Monitor: {state_str}")
+    return 0
+
+
 def _cmd_gui(_args: argparse.Namespace) -> int:
     """Launch the profile authoring GUI."""
     from voicechanger.gui import launch_gui
@@ -445,6 +478,7 @@ def main(argv: list[str] | None = None) -> NoReturn:
         "serve": _cmd_serve,
         "device": _cmd_device_list,
         "status": _cmd_status,
+        "monitor": _cmd_monitor,
         "process": _cmd_process,
         "gui": _cmd_gui,
     }

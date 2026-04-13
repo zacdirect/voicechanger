@@ -1,315 +1,176 @@
-"""Desktop GUI for real-time effect authoring (Flet / Material Design 3)."""
+"""Desktop GUI — NavigationRail shell with 4-view routing (Flet / Material Design 3)."""
 
 from __future__ import annotations
 
-from pathlib import Path
+import logging
+import threading
+import time
 from typing import Any
 
 import flet as ft
 
-from voicechanger.effects import EFFECT_REGISTRY
-from voicechanger.gui.logic import (
-    GuiEffectState,
-    PreviewManager,
-    build_profile_from_gui_state,
-    param_to_slider,
-    slider_to_param,
-)
-from voicechanger.profile import Profile, ProfileValidationError
+from voicechanger.gui.state import GuiState
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceChangerApp:
-    """Desktop profile authoring application."""
+    """Desktop application shell — NavigationRail with lazy view loading."""
 
-    def __init__(self, page: ft.Page) -> None:
+    VIEW_LABELS = ("Control", "Profiles", "Editor", "Tools")
+    VIEW_ICONS = (ft.Icons.TUNE, ft.Icons.LIBRARY_MUSIC, ft.Icons.EDIT, ft.Icons.BUILD)
+    VIEW_ICONS_SELECTED = (
+        ft.Icons.TUNE,
+        ft.Icons.LIBRARY_MUSIC,
+        ft.Icons.EDIT,
+        ft.Icons.BUILD,
+    )
+
+    def __init__(self, page: ft.Page, *, state: GuiState) -> None:
         self.page = page
-        self.page.title = "Voice Changer — Profile Editor"
-        self.page.window.width = 850
+        self.state = state
+        self._cleanup_callbacks: list[Any] = []
+        self._closed = False
+        self._closing = False
+
+        self.page.title = "Voice Changer"
+        self.page.window.width = 900
         self.page.window.height = 650
         self.page.theme_mode = ft.ThemeMode.DARK
-        self.page.padding = 20
+        self.page.padding = 0
         self.page.on_disconnect = lambda _: self._on_close()
+        self.page.window.prevent_close = True
+        self.page.window.on_event = self._on_window_event
 
-        self._preview = PreviewManager()
-        self._preview_active = False
-
-        self._effect_widgets: list[dict[str, Any]] = []
-
-        self._file_picker = ft.FilePicker()
-        self.page.services.append(self._file_picker)
+        self._views: dict[int, ft.Control] = {}
+        self._view_builders: dict[int, Any] = {}
+        self._view_content = ft.Column(expand=True)
 
         self._build_ui()
+
+    def register_view_builder(self, index: int, builder: Any) -> None:
+        """Register a callable that returns a ft.Control for a view index."""
+        self._view_builders[index] = builder
 
     # ── UI construction ──────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        # Profile metadata
-        self.name_field = ft.TextField(label="Name", expand=True)
-        self.author_field = ft.TextField(label="Author", expand=True)
-        self.desc_field = ft.TextField(label="Description", expand=True)
+        destinations = [
+            ft.NavigationRailDestination(
+                icon=icon,
+                selected_icon=sel_icon,
+                label=label,
+            )
+            for icon, sel_icon, label in zip(
+                self.VIEW_ICONS, self.VIEW_ICONS_SELECTED, self.VIEW_LABELS,
+                strict=True,
+            )
+        ]
 
-        meta_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text("Profile Info", weight=ft.FontWeight.BOLD, size=16),
-                        ft.Row([self.name_field]),
-                        ft.Row([self.author_field, self.desc_field]),
-                    ],
-                    spacing=8,
-                ),
-                padding=16,
-            ),
-        )
-
-        # Effect type selector
-        effect_types = sorted(EFFECT_REGISTRY.keys())
-        self.effect_dropdown = ft.Dropdown(
-            label="Add Effect",
-            options=[ft.dropdown.Option(t) for t in effect_types],
-            width=220,
-        )
-        add_btn = ft.ElevatedButton("Add", icon=ft.Icons.ADD, on_click=self._add_effect)
-        remove_btn = ft.OutlinedButton(
-            "Remove Last", icon=ft.Icons.REMOVE, on_click=self._remove_last_effect
-        )
-
-        # Scrollable effects list
-        self.effects_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
-
-        effects_card = ft.Card(
-            content=ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Text("Effects Chain", weight=ft.FontWeight.BOLD, size=16),
-                                self.effect_dropdown,
-                                add_btn,
-                                remove_btn,
-                            ],
-                            alignment=ft.MainAxisAlignment.START,
-                            spacing=12,
-                        ),
-                        self.effects_column,
-                    ],
-                    spacing=8,
-                ),
-                padding=16,
-            ),
+        self._rail = ft.NavigationRail(
+            selected_index=0,
+            label_type=ft.NavigationRailLabelType.ALL,
+            destinations=destinations,
+            on_change=self._on_nav_change,
+            min_width=80,
+            group_alignment=-0.9,
             expand=True,
         )
 
-        # Bottom action bar
-        self._preview_btn = ft.ElevatedButton(
-            "Start Preview",
-            icon=ft.Icons.PLAY_ARROW,
-            on_click=self._toggle_preview,
-        )
-        self._preview_status = ft.Text("", italic=True)
-
-        action_row = ft.Row(
-            [
-                ft.ElevatedButton(
-                    "Save Profile", icon=ft.Icons.SAVE, on_click=self._save_profile
-                ),
-                ft.OutlinedButton(
-                    "Load Profile", icon=ft.Icons.FOLDER_OPEN, on_click=self._load_profile
-                ),
-                ft.Container(expand=True),
-                self._preview_status,
-                self._preview_btn,
-            ],
-            alignment=ft.MainAxisAlignment.START,
-        )
-
-        self.page.add(meta_card, effects_card, action_row)
-
-    # ── Effects ──────────────────────────────────────────────────────
-
-    def _add_effect(self, _e: ft.ControlEvent | None = None) -> None:
-        effect_type = self.effect_dropdown.value
-        if not effect_type:
-            return
-
-        schema = EFFECT_REGISTRY.get(effect_type, {})
-        params = schema.get("params", {})
-
-        sliders: dict[str, ft.Slider] = {}
-        slider_labels: dict[str, ft.Text] = {}
-        slider_rows: list[ft.Control] = []
-
-        for param_name, pschema in params.items():
-            default_slider = param_to_slider(effect_type, param_name, pschema.get("default", 0.0))
-            label = ft.Text(f"{param_name}: {pschema.get('default', 0.0):.2f}", size=13)
-            slider_labels[param_name] = label
-
-            slider = ft.Slider(
-                min=0,
-                max=100,
-                value=default_slider,
-                divisions=200,
-                label="{value}",
+        self.page.add(
+            ft.Row(
+                [
+                    ft.Container(
+                        content=ft.Column(
+                            [self._rail],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        width=100,
+                        expand=False,
+                    ),
+                    ft.VerticalDivider(width=1),
+                    ft.Container(content=self._view_content, expand=True, padding=20),
+                ],
                 expand=True,
-                on_change_end=lambda e, et=effect_type, pn=param_name: self._on_slider_change(
-                    et, pn, e
-                ),
+                vertical_alignment=ft.CrossAxisAlignment.STRETCH,
             )
-            sliders[param_name] = slider
-            slider_rows.append(ft.Row([ft.Text(param_name, width=120), slider, label]))
-
-        container = ft.Container(
-            content=ft.Column(
-                [ft.Text(effect_type, weight=ft.FontWeight.W_600, size=14)] + slider_rows,
-                spacing=4,
-            ),
-            bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.ON_SURFACE),
-            border_radius=8,
-            padding=12,
         )
 
-        self._effect_widgets.append(
-            {
-                "type": effect_type,
-                "container": container,
-                "sliders": sliders,
-                "labels": slider_labels,
-            }
-        )
-        self.effects_column.controls.append(container)
-        self.page.update()
+    # ── Navigation ───────────────────────────────────────────────────
 
-    def _remove_last_effect(self, _e: ft.ControlEvent | None = None) -> None:
-        if self._effect_widgets:
-            self._effect_widgets.pop()
-            self.effects_column.controls.pop()
-            self.page.update()
+    def _on_nav_change(self, e: ft.ControlEvent) -> None:
+        index = int(e.data) if e.data is not None else 0
+        self._switch_view(index)
 
-    def _get_gui_effects(self) -> list[GuiEffectState]:
-        result: list[GuiEffectState] = []
-        for widget_info in self._effect_widgets:
-            effect_type = widget_info["type"]
-            params: dict[str, float] = {}
-            for param_name, slider in widget_info["sliders"].items():
-                params[param_name] = slider_to_param(
-                    effect_type, param_name, int(slider.value or 0)
-                )
-            result.append(GuiEffectState(type=effect_type, params=params))
-        return result
-
-    # ── Save / Load ──────────────────────────────────────────────────
-
-    async def _save_profile(self, _e: ft.ControlEvent | None = None) -> None:
-        name = (self.name_field.value or "").strip()
-        if not name:
-            self._show_snackbar("Profile name is required", error=True)
-            return
-
-        try:
-            effects = self._get_gui_effects()
-            profile = build_profile_from_gui_state(
-                name=name,
-                author=(self.author_field.value or "").strip(),
-                description=(self.desc_field.value or "").strip(),
-                effects=effects,
-            )
-        except ProfileValidationError as e:
-            self._show_snackbar(f"Validation Error: {e}", error=True)
-            return
-
-        result = await self._file_picker.save_file(
-            dialog_title="Save Profile",
-            file_name=f"{name}.json",
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["json"],
-        )
-        if result:
-            profile.save(Path(result))
-            self._show_snackbar(f"Profile saved to {result}")
-
-    async def _load_profile(self, _e: ft.ControlEvent | None = None) -> None:
-        files = await self._file_picker.pick_files(
-            dialog_title="Load Profile",
-            file_type=ft.FilePickerFileType.CUSTOM,
-            allowed_extensions=["json"],
-            allow_multiple=False,
-        )
-        if not files:
-            return
-
-        path = files[0].path
-        try:
-            profile = Profile.load(Path(path))
-        except (ProfileValidationError, Exception) as e:
-            self._show_snackbar(f"Failed to load profile: {e}", error=True)
-            return
-
-        # Populate metadata
-        self.name_field.value = profile.name
-        self.author_field.value = profile.author
-        self.desc_field.value = profile.description
-
-        # Clear existing effects
-        self._effect_widgets.clear()
-        self.effects_column.controls.clear()
-
-        # Re-add loaded effects
-        for effect in profile.effects:
-            self.effect_dropdown.value = effect["type"]
-            self._add_effect()
-            if self._effect_widgets:
-                widget = self._effect_widgets[-1]
-                for param_name, value in effect.get("params", {}).items():
-                    slider = widget["sliders"].get(param_name)
-                    if slider:
-                        slider.value = param_to_slider(
-                            effect["type"], param_name, float(value)
-                        )
-        self.page.update()
-
-    # ── Preview ──────────────────────────────────────────────────────
-
-    def _toggle_preview(self, _e: ft.ControlEvent | None = None) -> None:
-        if self._preview_active:
-            self._preview.stop_preview()
-            self._preview_active = False
-            self._preview_btn.text = "Start Preview"
-            self._preview_btn.icon = ft.Icons.PLAY_ARROW
-            self._preview_status.value = ""
-        else:
-            effects = self._get_gui_effects()
-            self._preview.start_preview(effects)
-            if self._preview.is_active:
-                self._preview_active = True
-                self._preview_btn.text = "Stop Preview"
-                self._preview_btn.icon = ft.Icons.STOP
-                self._preview_status.value = "Preview active"
+    def _switch_view(self, index: int) -> None:
+        if index not in self._views:
+            builder = self._view_builders.get(index)
+            if builder is not None:
+                self._views[index] = builder()
             else:
-                self._preview_status.value = "Preview failed — no audio device"
+                self._views[index] = ft.Text(
+                    f"{self.VIEW_LABELS[index]} — coming soon",
+                    size=18,
+                    italic=True,
+                )
+
+        self._view_content.controls = [self._views[index]]
         self.page.update()
 
-    def _on_slider_change(
-        self, effect_type: str, param_name: str, e: ft.ControlEvent
-    ) -> None:
-        # Update the value label
-        for widget in self._effect_widgets:
-            if widget["type"] == effect_type and param_name in widget["sliders"]:
-                real_value = slider_to_param(effect_type, param_name, int(float(e.data)))
-                widget["labels"][param_name].value = f"{param_name}: {real_value:.2f}"
-                break
+    def navigate_to(self, index: int) -> None:
+        """Programmatically navigate to a view (used by cross-view interactions)."""
+        self._rail.selected_index = index
+        self._switch_view(index)
 
-        if self._preview_active:
-            effects = self._get_gui_effects()
-            self._preview.update_preview(effects)
-        self.page.update()
+    def register_cleanup(self, callback: Any) -> None:
+        """Register a callback to run when the GUI is closing."""
+        self._cleanup_callbacks.append(callback)
+
+    def _on_window_event(self, e: ft.WindowEvent) -> None:
+        if e.type in (ft.WindowEventType.CLOSE, "close"):
+            if self._closing:
+                return
+            self._closing = True
+
+            def _fallback_exit() -> None:
+                # If toolkit teardown hangs, force-exit after brief grace period.
+                time.sleep(2.0)
+                import os
+                os._exit(0)
+
+            threading.Thread(target=_fallback_exit, daemon=True).start()
+
+            async def _graceful_close() -> None:
+                self._on_close()
+                try:
+                    await self.page.window.destroy()
+                except Exception:
+                    logger.warning("Window destroy failed during close", exc_info=True)
+
+            self.page.run_task(_graceful_close)
+
+    # ── Lifecycle ────────────────────────────────────────────────────
 
     def _on_close(self) -> None:
-        self._preview.stop_preview()
+        if self._closed:
+            return
+        self._closed = True
+        for callback in self._cleanup_callbacks:
+            try:
+                callback()
+            except Exception:
+                logger.warning("GUI cleanup callback failed", exc_info=True)
+
+    def shutdown(self) -> None:
+        """Public shutdown entrypoint for external lifecycle handlers."""
+        self._on_close()
 
     # ── Helpers ───────────────────────────────────────────────────────
 
-    def _show_snackbar(self, message: str, *, error: bool = False) -> None:
-        self.page.open(
+    def show_snackbar(self, message: str, *, error: bool = False) -> None:
+        if error:
+            logger.error("UI error notification: %s", message)
+        self.page.show_dialog(
             ft.SnackBar(
                 content=ft.Text(message),
                 bgcolor=ft.Colors.ERROR if error else None,

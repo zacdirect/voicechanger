@@ -5,7 +5,7 @@ Real-time voice changer for Raspberry Pi, built on [Spotify's Pedalboard](https:
 - **Headless-first**: Runs as a systemd service on a Raspberry Pi with CLI control over a Unix socket
 - **Profile-based**: Character voices are portable JSON files with ordered effect chains
 - **Community-friendly**: Copy a profile JSON into the user directory and it's immediately available
-- **GUI authoring**: Desktop tkinter app for interactive profile creation with live audio preview
+- **GUI authoring**: Desktop Flet app for full-parity voice changer control with live audio preview
 
 ## Requirements
 
@@ -93,15 +93,24 @@ voicechanger process input.wav output.wav --profile darth-vader
 voicechanger device list
 ```
 
-### Launch the Profile Authoring GUI
+### Launch the GUI
 
-The desktop GUI lets you build profiles interactively with sliders and live audio preview:
+The desktop GUI provides full-parity control — everything the CLI can do, plus live audio preview:
 
 ```bash
 voicechanger gui
 ```
 
-Adjust effect parameters in real time, hear the results, and save the profile as a portable JSON file.
+**Mode detection**: If the service is already running, the GUI connects in **Remote** mode (IPC). Otherwise it starts in **Embedded** mode with its own audio pipeline.
+
+**Four views** (via NavigationRail sidebar):
+
+| View | Purpose |
+|------|---------|
+| **Control** | Start/stop pipeline, select audio devices, toggle monitor, view status and level meters |
+| **Profiles** | Browse builtin/user profiles, activate, delete, export, import |
+| **Editor** | Effect chain editor with sliders, live preview, save, builtin auto-fork |
+| **Tools** | Offline file processing with profile selection and progress display |
 
 ## Configuration
 

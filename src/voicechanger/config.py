@@ -115,3 +115,38 @@ def load_config(path: Path) -> Config:
         )
 
     return config
+
+
+def save_config(path: Path, config: Config) -> None:
+    """Persist configuration to TOML.
+
+    The writer emits a stable, explicit schema so CLI and GUI can share
+    profile and hardware settings seamlessly.
+    """
+    lines = [
+        "[audio]",
+        f"sample_rate = {int(config.audio.sample_rate)}",
+        f"buffer_size = {int(config.audio.buffer_size)}",
+        f"input_device = \"{config.audio.input_device}\"",
+        f"output_device = \"{config.audio.output_device}\"",
+        f"preferred_input_device = \"{config.audio.preferred_input_device}\"",
+        f"preferred_output_device = \"{config.audio.preferred_output_device}\"",
+        f"device_poll_interval = {int(config.audio.device_poll_interval)}",
+        f"device_mode = \"{config.audio.device_mode}\"",
+        "",
+        "[profiles]",
+        f"builtin_dir = \"{config.profiles.builtin_dir}\"",
+        f"user_dir = \"{config.profiles.user_dir}\"",
+        f"active_profile = \"{config.profiles.active_profile}\"",
+        "",
+        "[service]",
+        f"socket_path = \"{config.service.socket_path}\"",
+        f"log_level = \"{config.service.log_level}\"",
+        f"log_format = \"{config.service.log_format}\"",
+        "",
+        "[gui]",
+        f"window_width = {int(config.gui.window_width)}",
+        f"window_height = {int(config.gui.window_height)}",
+        "",
+    ]
+    path.write_text("\n".join(lines), encoding="utf-8")

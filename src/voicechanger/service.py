@@ -193,6 +193,9 @@ class Service:
             "get_profile": self._cmd_get_profile,
             "get_status": self._cmd_get_status,
             "reload_profiles": self._cmd_reload_profiles,
+            "set_monitor": self._cmd_set_monitor,
+            "set_device": self._cmd_set_device,
+            "shutdown": self._cmd_shutdown,
         }
 
         handler = handlers.get(command)
@@ -295,6 +298,7 @@ class Service:
                 "state": status["state"],
                 "active_profile": self._active_profile_name,
                 "uptime_seconds": int(uptime),
+                "monitor_enabled": self._pipeline.monitor_enabled,
                 "audio": {
                     "sample_rate": self._config.audio.sample_rate,
                     "buffer_size": self._config.audio.buffer_size,
@@ -309,6 +313,105 @@ class Service:
         return {
             "ok": True,
             "data": {"profiles_count": count},
+        }
+
+    def _cmd_set_monitor(self, params: dict[str, Any]) -> dict[str, Any]:
+        if "enabled" not in params:
+            return {
+                "ok": False,
+                "error": {"code": "INVALID_PARAMS", "message": "Missing 'enabled' parameter"},
+            }
+
+        from voicechanger.audio import PipelineState
+
+        if self._pipeline.state not in (PipelineState.RUNNING, PipelineState.DEGRADED):
+            return {
+                "ok": False,
+                "error": {"code": "PIPELINE_NOT_RUNNING", "message": "Pipeline is not running"},
+            }
+
+        enabled = bool(params["enabled"])
+        self._pipeline.set_monitor_enabled(enabled)
+        return {
+            "ok": True,
+            "data": {"monitor_enabled": self._pipeline.monitor_enabled},
+        }
+
+    def _cmd_set_device(self, params: dict[str, Any]) -> dict[str, Any]:
+        input_device = params.get("input_device")
+        output_device = params.get("output_device")
+
+        if input_device is None and output_device is None:
+            return {
+                "ok": False,
+                "error": {
+                    "code": "INVALID_PARAMS",
+                    "message": "At least one of 'input_device' or 'output_device' is required",
+                },
+            }
+
+        from voicechanger.audio import PipelineState
+
+        if self._pipeline.state not in (PipelineState.RUNNING, PipelineState.DEGRADED):
+            return {
+                "ok": False,
+                "error": {"code": "PIPELINE_NOT_RUNNING", "message": "Pipeline is not running"},
+            }
+
+        # Update config with new devices
+        if input_device is not None:
+            self._config.audio.input_device = input_device
+        if output_device is not None:
+            self._config.audio.output_device = output_device
+
+        # Restart pipeline with new devices
+        current_profile = self._registry.get(self._active_profile_name)
+        if current_profile is None:
+            current_profile = self._registry.get("clean")
+
+        try:
+            self._pipeline.stop()
+            self._pipeline.start(
+                current_profile,
+                sample_rate=self._config.audio.sample_rate,
+                buffer_size=self._config.audio.buffer_size,
+                input_device=self._config.audio.input_device,
+                output_device=self._config.audio.output_device,
+            )
+            return {
+                "ok": True,
+                "data": {
+                    "input_device": self._config.audio.input_device,
+                    "output_device": self._config.audio.output_device,
+                    "restarted": True,
+                },
+            }
+        except Exception as e:
+            logger.error("Failed to restart pipeline with new devices: %s", e)
+            # Try to restart with defaults
+            try:
+                self._config.audio.input_device = "default"
+                self._config.audio.output_device = "default"
+                self._pipeline.start(
+                    current_profile,
+                    sample_rate=self._config.audio.sample_rate,
+                    buffer_size=self._config.audio.buffer_size,
+                    input_device="default",
+                    output_device="default",
+                )
+            except Exception:
+                logger.error("Failed to restart with defaults", exc_info=True)
+            return {
+                "ok": False,
+                "error": {"code": "DEVICE_OPEN_FAILED", "message": str(e)},
+            }
+
+    def _cmd_shutdown(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Request graceful service shutdown."""
+        self._shutdown_event.set()
+        return {
+            "ok": True,
+            "data": {"shutting_down": True},
         }
 
     def _cleanup(self) -> None:
