@@ -10,6 +10,7 @@ from typing import Any
 from voicechanger.effects import EFFECT_REGISTRY
 from voicechanger.gui.logic import (
     GuiEffectState,
+    PreviewManager,
     build_profile_from_gui_state,
     param_to_slider,
     slider_to_param,
@@ -26,7 +27,9 @@ class VoiceChangerApp:
         self.root.geometry("800x600")
 
         self.effects: list[dict[str, Any]] = []
+        self._preview = PreviewManager()
         self._build_ui()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _build_ui(self) -> None:
         # Profile metadata frame
@@ -92,6 +95,16 @@ class VoiceChangerApp:
             side=tk.LEFT, padx=5
         )
 
+        # Preview controls
+        self._preview_active = tk.BooleanVar(value=False)
+        self._preview_btn = ttk.Button(
+            btn_frame, text="Start Preview", command=self._toggle_preview
+        )
+        self._preview_btn.pack(side=tk.LEFT, padx=10)
+
+        self._preview_status = ttk.Label(btn_frame, text="")
+        self._preview_status.pack(side=tk.LEFT, padx=5)
+
         self.slider_widgets: list[dict[str, Any]] = []
 
     def _add_effect(self) -> None:
@@ -111,6 +124,7 @@ class VoiceChangerApp:
             default_slider = param_to_slider(effect_type, param_name, pschema.get("default", 0.0))
             slider = tk.Scale(frame, from_=0, to=100, orient=tk.HORIZONTAL, length=300)
             slider.set(default_slider)
+            slider.bind("<ButtonRelease-1>", lambda e: self._on_slider_change())
             slider.pack(fill=tk.X)
             sliders[param_name] = slider
 
@@ -196,6 +210,31 @@ class VoiceChangerApp:
                     if slider:
                         slider_val = param_to_slider(effect["type"], param_name, float(value))
                         slider.set(slider_val)
+
+    def _toggle_preview(self) -> None:
+        if self._preview_active.get():
+            self._preview.stop_preview()
+            self._preview_active.set(False)
+            self._preview_btn.configure(text="Start Preview")
+            self._preview_status.configure(text="")
+        else:
+            effects = self._get_gui_effects()
+            self._preview.start_preview(effects)
+            if self._preview.is_active:
+                self._preview_active.set(True)
+                self._preview_btn.configure(text="Stop Preview")
+                self._preview_status.configure(text="Preview active")
+            else:
+                self._preview_status.configure(text="Preview failed — no audio device")
+
+    def _on_slider_change(self) -> None:
+        if self._preview_active.get():
+            effects = self._get_gui_effects()
+            self._preview.update_preview(effects)
+
+    def _on_close(self) -> None:
+        self._preview.stop_preview()
+        self.root.destroy()
 
     def run(self) -> None:
         self.root.mainloop()

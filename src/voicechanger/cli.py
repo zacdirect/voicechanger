@@ -83,6 +83,9 @@ def _build_parser() -> argparse.ArgumentParser:
     process_parser.add_argument("output_file", help="Output audio file")
     process_parser.add_argument("--profile", required=True, help="Profile to apply")
 
+    # gui
+    subparsers.add_parser("gui", help="Launch the profile authoring GUI")
+
     return parser
 
 
@@ -421,6 +424,14 @@ def _cmd_process(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_gui(_args: argparse.Namespace) -> int:
+    """Launch the profile authoring GUI."""
+    from voicechanger.gui import launch_gui
+
+    launch_gui()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     """Main CLI entry point."""
     parser = _build_parser()
@@ -435,6 +446,7 @@ def main(argv: list[str] | None = None) -> NoReturn:
         "device": _cmd_device_list,
         "status": _cmd_status,
         "process": _cmd_process,
+        "gui": _cmd_gui,
     }
 
     if args.command == "profile":

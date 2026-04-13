@@ -107,10 +107,19 @@
 
 ### Implementation for User Story 3
 
-- [X] T034 [US3] Implement GUI application in `src/voicechanger/gui/app.py` — tkinter window with effect type dropdown, parameter sliders per effect type, add/remove/reorder effects, live audio preview via AudioPipeline, save as profile JSON, profile name/author/description fields
+- [X] T034 [US3] Implement GUI application in `src/voicechanger/gui/app.py` — tkinter window with effect type dropdown, parameter sliders per effect type, add/remove/reorder effects, save as profile JSON, profile name/author/description fields
 - [X] T035 [US3] Create `src/voicechanger/gui/__init__.py` with GUI entry point function
 
-**Checkpoint**: GUI launches on dev machine, effects adjustable in real time with audio feedback, profiles saved are compatible with headless service.
+### Missing: Live Audio Preview & CLI Entry Point (US3 gaps)
+
+- [X] T046 [P] [US3] Write unit tests for live preview logic in `tests/unit/test_gui.py` — test `build_preview_pipeline()` constructs AudioPipeline from current GUI effect state, test `update_preview()` rebuilds plugins on slider change, test preview start/stop lifecycle (NO tkinter dependency — test data logic in `src/voicechanger/gui/logic.py` only)
+- [X] T047 [US3] Implement live audio preview in `src/voicechanger/gui/logic.py` — add `PreviewManager` class that wraps `AudioPipeline`, provides `start_preview(effects)`, `update_preview(effects)`, `stop_preview()` methods, builds a `Profile` from current `GuiEffectState` list and feeds it to `AudioPipeline.start()` / `switch_profile()`
+- [X] T048 [US3] Integrate live preview into GUI in `src/voicechanger/gui/app.py` — add Preview Start/Stop toggle button, instantiate `PreviewManager`, call `update_preview()` on slider change events (bind `<ButtonRelease-1>` and `<B1-Motion>` on sliders), handle AudioPipeline errors gracefully with status label
+- [X] T049 [US3] Add `gui` subcommand to CLI in `src/voicechanger/cli.py` — add `voicechanger gui` command that imports and calls `launch_gui()`, register in `main()` command handlers
+- [X] T050 [US3] Update `tests/unit/test_gui.py` — add tests for PreviewManager lifecycle (start/update/stop), verify preview builds correct plugin list from GUI state, verify preview handles missing audio gracefully
+- [X] T051 Run US3 tests and verify: `pytest tests/unit/test_gui.py -v`
+
+**Checkpoint**: GUI launches on dev machine via `voicechanger gui`, effects adjustable in real time with audio feedback, profiles saved are compatible with headless service.
 
 ---
 
@@ -174,7 +183,7 @@
 - **User Story 3 (Phase 5)**: Depends on Foundational (Phase 2) + US1 (AudioPipeline needed for live preview)
 - **User Story 4 (Phase 6)**: Depends on Foundational (Phase 2) + US1 (service reload command)
 - **User Story 5 (Phase 7)**: Depends on Foundational (Phase 2) only (offline, no service needed)
-- **Polish (Phase 8)**: Depends on all user stories being complete
+- **Polish (Phase 8)**: Depends on all user stories being complete (including US3 gap tasks T046–T051)
 
 ### User Story Dependencies
 

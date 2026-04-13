@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from voicechanger.audio import PipelineState
 from voicechanger.gui.logic import (
     GuiEffectState,
+    PreviewManager,
     build_profile_from_gui_state,
     param_to_slider,
     slider_to_param,
@@ -95,3 +98,90 @@ class TestBuildProfile:
         assert loaded.name == "round-trip-gui"
         assert len(loaded.effects) == 2
         assert loaded.effects[0]["params"]["semitones"] == -4.0
+
+
+class TestPreviewManager:
+    """Test PreviewManager lifecycle (no tkinter, no real audio)."""
+
+    def test_start_preview_creates_pipeline(self) -> None:
+        mgr = PreviewManager()
+        effects = [GuiEffectState(type="Gain", params={"gain_db": 3.0})]
+        with patch.object(mgr._pipeline, "start") as mock_start:
+            mgr.start_preview(effects)
+            mock_start.assert_called_once()
+            profile = mock_start.call_args[0][0]
+            assert profile.name == "preview"
+            assert len(profile.effects) == 1
+            assert profile.effects[0]["type"] == "Gain"
+        assert mgr.is_active
+
+    def test_stop_preview(self) -> None:
+        mgr = PreviewManager()
+        effects = [GuiEffectState(type="Gain", params={"gain_db": 0.0})]
+        with patch.object(mgr._pipeline, "start"):
+            mgr.start_preview(effects)
+        with patch.object(mgr._pipeline, "stop") as mock_stop:
+            mgr.stop_preview()
+            mock_stop.assert_called_once()
+        assert not mgr.is_active
+
+    def test_stop_when_not_active_is_noop(self) -> None:
+        mgr = PreviewManager()
+        with patch.object(mgr._pipeline, "stop") as mock_stop:
+            mgr.stop_preview()
+            mock_stop.assert_not_called()
+
+    def test_update_preview_switches_profile(self) -> None:
+        mgr = PreviewManager()
+        effects1 = [GuiEffectState(type="Gain", params={"gain_db": 3.0})]
+        with patch.object(mgr._pipeline, "start"):
+            mgr.start_preview(effects1)
+        # Force pipeline state to RUNNING so switch_profile works
+        mgr._pipeline._state = PipelineState.RUNNING
+        effects2 = [
+            GuiEffectState(type="Gain", params={"gain_db": 6.0}),
+            GuiEffectState(type="Reverb", params={"room_size": 0.5}),
+        ]
+        with patch.object(mgr._pipeline, "switch_profile") as mock_switch:
+            mgr.update_preview(effects2)
+            mock_switch.assert_called_once()
+            profile = mock_switch.call_args[0][0]
+            assert len(profile.effects) == 2
+
+    def test_update_preview_when_not_active_starts(self) -> None:
+        mgr = PreviewManager()
+        effects = [GuiEffectState(type="Gain", params={"gain_db": 0.0})]
+        with patch.object(mgr._pipeline, "start") as mock_start:
+            mgr.update_preview(effects)
+            mock_start.assert_called_once()
+        assert mgr.is_active
+
+    def test_preview_builds_correct_plugin_list(self) -> None:
+        mgr = PreviewManager()
+        effects = [
+            GuiEffectState(type="LivePitchShift", params={"semitones": -4.0}),
+            GuiEffectState(type="Distortion", params={"drive_db": 15.0}),
+            GuiEffectState(type="Reverb", params={"room_size": 0.8, "wet_level": 0.5}),
+        ]
+        with patch.object(mgr._pipeline, "start") as mock_start:
+            mgr.start_preview(effects)
+            profile = mock_start.call_args[0][0]
+            assert len(profile.effects) == 3
+            assert profile.effects[0]["type"] == "LivePitchShift"
+            assert profile.effects[1]["type"] == "Distortion"
+            assert profile.effects[2]["type"] == "Reverb"
+
+    def test_preview_handles_start_error_gracefully(self) -> None:
+        mgr = PreviewManager()
+        effects = [GuiEffectState(type="Gain", params={"gain_db": 0.0})]
+        with patch.object(mgr._pipeline, "start", side_effect=Exception("no audio")):
+            mgr.start_preview(effects)
+        # Should not crash, and should not be marked active
+        assert not mgr.is_active
+
+    def test_preview_empty_effects(self) -> None:
+        mgr = PreviewManager()
+        with patch.object(mgr._pipeline, "start") as mock_start:
+            mgr.start_preview([])
+            profile = mock_start.call_args[0][0]
+            assert profile.effects == []

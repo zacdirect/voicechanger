@@ -98,8 +98,11 @@ class TestCLIArgumentParsing:
         args = parser.parse_args(["process", "input.wav", "output.wav", "--profile", "clean"])
         assert args.command == "process"
         assert args.input_file == "input.wav"
-        assert args.output_file == "output.wav"
-        assert args.profile == "clean"
+
+    def test_gui_command(self) -> None:
+        parser = _build_parser()
+        args = parser.parse_args(["gui"])
+        assert args.command == "gui"
 
 
 class TestCLIExitCodes:

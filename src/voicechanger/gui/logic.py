@@ -1,11 +1,15 @@
-"""GUI data logic — slider mapping and profile building (no tkinter dependency)."""
+"""GUI data logic — slider mapping, profile building, and live preview (no tkinter dependency)."""
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 
+from voicechanger.audio import AudioPipeline
 from voicechanger.effects import EFFECT_REGISTRY
 from voicechanger.profile import Profile
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,3 +60,51 @@ def build_profile_from_gui_state(
         description=description,
         effects=effect_dicts,
     )
+
+
+class PreviewManager:
+    """Manages live audio preview for the GUI using AudioPipeline."""
+
+    def __init__(self) -> None:
+        self._pipeline = AudioPipeline()
+        self._active = False
+
+    @property
+    def is_active(self) -> bool:
+        return self._active
+
+    def start_preview(self, effects: list[GuiEffectState]) -> None:
+        """Start live audio preview with the given effects."""
+        profile = self._build_preview_profile(effects)
+        try:
+            self._pipeline.start(profile)
+            self._active = True
+        except Exception:
+            logger.warning("Failed to start audio preview", exc_info=True)
+            self._active = False
+
+    def update_preview(self, effects: list[GuiEffectState]) -> None:
+        """Update the live preview with new effect parameters."""
+        if not self._active:
+            self.start_preview(effects)
+            return
+        profile = self._build_preview_profile(effects)
+        self._pipeline.switch_profile(profile)
+
+    def stop_preview(self) -> None:
+        """Stop the live audio preview."""
+        if not self._active:
+            return
+        self._pipeline.stop()
+        self._active = False
+
+    @staticmethod
+    def _build_preview_profile(effects: list[GuiEffectState]) -> Profile:
+        """Build a transient profile for preview."""
+        effect_dicts = [{"type": e.type, "params": dict(e.params)} for e in effects]
+        return Profile(
+            name="preview",
+            author="",
+            description="Live preview",
+            effects=effect_dicts,
+        )
