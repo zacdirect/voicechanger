@@ -1,0 +1,45 @@
+# Build matrix configuration for multi-architecture release
+# Define targets, their architectures, and build parameters
+
+matrix:
+  include:
+    - name: "x86_64 (Linux/Ubuntu)"
+      arch: "x86_64"
+      runs-on: "ubuntu-22.04"
+      python: "3.11"
+      artifacts:
+        - "dist/*.whl"
+        - "dist/*.deb"
+
+    - name: "aarch64 (Raspberry Pi OS 64-bit)"
+      arch: "aarch64"
+      runs-on: "ubuntu-22.04"  # Can use native runner or emulation
+      python: "3.11"
+      qemu: true  # Enable QEMU emulation if native runner unavailable
+      artifacts:
+        - "dist/*.whl"
+        - "dist/*.deb"
+
+    - name: "armv7l (Raspberry Pi OS 32-bit)"
+      arch: "armv7l"
+      runs-on: "ubuntu-22.04"  # Can use native runner or emulation
+      python: "3.11"
+      qemu: true  # Enable QEMU emulation if native runner unavailable
+      artifacts:
+        - "dist/*.whl"
+        - "dist/*.deb"
+
+# Build options
+build_options:
+  patch_pedalboard: true
+  include_deb_packages: true
+  verify_entry_points: true
+  sign_artifacts: false  # Set to true if GPG signing needed
+
+# Release artifact strategy
+release:
+  create_github_release: true
+  upload_wheels: true
+  upload_deb_packages: true
+  include_pedalboard_patch: true
+  generate_checksums: true

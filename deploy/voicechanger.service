@@ -1,15 +1,20 @@
 [Unit]
 Description=Voice Changer real-time audio effect service
-After=sound.target
+After=sound.target network.target
+Documentation=https://github.com/example/voicechanger/wiki
 
 [Service]
 Type=simple
-ExecStart=voicechanger serve --config /etc/voicechanger/voicechanger.toml
+ExecStart=voicechanger serve --config ${HOME}/.config/voicechanger/voicechanger.toml
 Restart=on-failure
 RestartSec=5
-User=voicechanger
-Group=audio
-Environment=XDG_RUNTIME_DIR=/run/user/%U
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=voicechanger
+# Uncomment to run as dedicated user (requires user setup)
+# User=voicechanger
+# Group=audio
+# Environment=XDG_RUNTIME_DIR=/run/user/%U
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target

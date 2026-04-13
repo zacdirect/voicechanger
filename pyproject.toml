@@ -24,6 +24,7 @@ dev = [
 
 [project.scripts]
 voicechanger = "voicechanger.cli:main"
+voicechanger-gui = "voicechanger.gui.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
