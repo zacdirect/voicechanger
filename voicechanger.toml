@@ -1,0 +1,23 @@
+[audio]
+sample_rate = 48000
+buffer_size = 256
+input_device = "default"
+output_device = "default"
+preferred_input_device = ""
+preferred_output_device = ""
+device_poll_interval = 5
+device_mode = "flexible"
+
+[profiles]
+builtin_dir = "profiles/builtin"
+user_dir = "profiles/user"
+active_profile = "clean"
+
+[service]
+socket_path = ""
+log_level = "INFO"
+log_format = "json"
+
+[gui]
+window_width = 800
+window_height = 600
