@@ -19,12 +19,12 @@
 
 **Checkpoint**: All builds can run on three architectures; version management is automated
 
-- [ ] T001 Create GitHub Actions workflows directory structure in `.github/workflows/`
-- [ ] T002 [P] Create systemd service file with ExecStart entry point in `deploy/voicechanger.service`
-- [ ] T003 [P] Create production mode toggle script in `deploy/production-mode-toggle.sh` (systemd target switcher)
-- [ ] T004 [P] Initialize version automation helper script in `scripts/release/version-bump.py` (semantic versioning updater)
-- [ ] T005 Create build matrix configuration stub in `.github/workflows/build-matrix.yml`
-- [ ] T006 [P] Initialize .gitignore entry for `profiles/user/` (user profiles excluded from version control)
+- [X] T001 Create GitHub Actions workflows directory structure in `.github/workflows/`
+- [X] T002 [P] Create systemd service file with ExecStart entry point in `deploy/voicechanger.service`
+- [X] T003 [P] Create production mode toggle script in `deploy/production-mode-toggle.sh` (systemd target switcher)
+- [X] T004 [P] Initialize version automation helper script in `scripts/release/version-bump.py` (semantic versioning updater)
+- [X] T005 Create build matrix configuration stub in `.github/workflows/build-matrix.yml`
+- [X] T006 [P] Initialize .gitignore entry for `profiles/user/` (user profiles excluded from version control)
 
 ---
 
@@ -34,12 +34,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete (especially US1 and US3)
 
-- [ ] T007 Implement multi-architecture build matrix workflow in `.github/workflows/multi-arch-release.yml` (define x86_64, aarch64, armv7l targets)
-- [ ] T008 Create pedalboard patch verification step in build workflow (verify LivePitchShift present after patch apply)
-- [ ] T009 Implement install entry points in `pyproject.toml` (ensure `voicechanger` and `voicechanger-gui` CLI commands are defined)
-- [ ] T010 [P] Update systemd service file in `deploy/voicechanger.service` to use correct entry points
-- [ ] T011 Create Debian package builder script in `scripts/release/build-deb.sh` (FPM or setuptools-based)
-- [ ] T012 Add version string extraction to `src/voicechanger/__init__.py` (make version readable by build scripts)
+- [X] T007 Implement multi-architecture build matrix workflow in `.github/workflows/multi-arch-release.yml` (define x86_64, aarch64, armv7l targets)
+- [X] T008 Create pedalboard patch verification step in build workflow (verify LivePitchShift present after patch apply)
+- [X] T009 Implement install entry points in `pyproject.toml` (ensure `voicechanger` and `voicechanger-gui` CLI commands are defined)
+- [X] T010 [P] Update systemd service file in `deploy/voicechanger.service` to use correct entry points
+- [X] T011 Create Debian package builder script in `scripts/release/build-deb.sh` (FPM or setuptools-based)
+- [X] T012 Add version string extraction to `src/voicechanger/__init__.py` (make version readable by build scripts)
 
 **Checkpoint**: Build infrastructure ready; all three architectures can be targeted; pedalboard patch validation works
 
@@ -53,16 +53,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T013 [US1] Create contract test for build artifacts in `tests/contract/test_build_artifacts.py` (verify wheels have correct entry points, pedalboard patch applied)
-- [ ] T014 [US1] Create integration test for multi-arch build in `tests/integration/test_release_pipeline.py` (simulate build completion, verify artifact integrity)
+- [X] T013 [US1] Create contract test for build artifacts in `tests/contract/test_build_artifacts.py` (verify wheels have correct entry points, pedalboard patch applied)
+- [X] T014 [US1] Create integration test for multi-arch build in `tests/integration/test_release_pipeline.py` (simulate build completion, verify artifact integrity)
 
 ### Implementation for User Story 1
 
-- [ ] T015 [P] [US1] Implement build steps for x86_64 in `.github/workflows/build-linux.yml` (clone, install deps, build wheel, verify entry points)
-- [ ] T016 [P] [US1] Implement build steps for aarch64 in `.github/workflows/build-linux.yml` (native or emulated; apply pedalboard patch)
-- [ ] T017 [P] [US1] Implement build steps for armv7l in `.github/workflows/build-linux.yml` (native or emulated; apply pedalboard patch)
-- [ ] T018 [US1] Implement GitHub release publication workflow in `.github/workflows/publish-release.yml` (create release, upload wheels, add pedalboard patch artifact)
-- [ ] T019 [US1] Add SHA256 checksum generation and publication in `.github/workflows/publish-release.yml` (verify artifact integrity post-download)
+- [X] T015 [P] [US1] Implement build steps for x86_64 in `.github/workflows/build-linux.yml` (clone, install deps, build wheel, verify entry points)
+- [X] T016 [P] [US1] Implement build steps for aarch64 in `.github/workflows/build-linux.yml` (native or emulated; apply pedalboard patch)
+- [X] T017 [P] [US1] Implement build steps for armv7l in `.github/workflows/build-linux.yml` (native or emulated; apply pedalboard patch)
+- [X] T018 [US1] Implement GitHub release publication workflow in `.github/workflows/publish-release.yml` (create release, upload wheels, add pedalboard patch artifact)
+- [X] T019 [US1] Add SHA256 checksum generation and publication in `.github/workflows/publish-release.yml` (verify artifact integrity post-download)
 - [ ] T020 [US1] Test release workflow with dry-run on feature branch before PR merge
 
 **Checkpoint**: User Story 1 Complete. Developers can merge to `main` and releases are automatically published with all three architecture wheels.
@@ -104,16 +104,16 @@
 
 - [ ] T030 [P] [US3] Create unit test for device enumeration in `tests/unit/test_cli_device_commands.py` (test `list-devices` output format, verify device properties present)
 - [ ] T031 [P] [US3] Create unit test for device selection persistence in `tests/unit/test_device_persistence.py` (write device ID to config, read back, verify correctness)
-- [ ] T032 [US3] Create contract test for CLI interface in `tests/contract/test_cli_commands.py` (verify `list-devices` and `set-device` signatures, exit codes)
+- [X] T032 [US3] Create contract test for CLI interface in `tests/contract/test_cli_commands.py` (verify `list-devices` and `set-device` signatures, exit codes)
 - [ ] T033 [US3] Create integration test for device selection across restarts in `tests/integration/test_device_persist_restart.py` (mock restart or use tmpdir persistence trick)
 
 ### Implementation for User Story 3
 
-- [ ] T034 [P] [US3] Implement `voicechanger list-devices` CLI command in `src/voicechanger/cli.py` (calls `device.py` enumeration; formats human-readable output)
-- [ ] T035 [P] [US3] Implement `voicechanger set-device input <id>` and `set-device output <id>` CLI commands in `src/voicechanger/cli.py`
-- [ ] T036 [US3] Verify device persistence logic in `src/voicechanger/config.py` (ensure selected device ID is written to config file)
+- [X] T034 [P] [US3] Implement `voicechanger list-devices` CLI command in `src/voicechanger/cli.py` (calls `device.py` enumeration; formats human-readable output)
+- [X] T035 [P] [US3] Implement `voicechanger set-device input <id>` and `set-device output <id>` CLI commands in `src/voicechanger/cli.py`
+- [X] T036 [US3] Verify device persistence logic in `src/voicechanger/config.py` (ensure selected device ID is written to config file)
 - [ ] T037 [US3] Verify device restoration logic in `src/voicechanger/service.py` or `src/voicechanger/audio.py` (read device ID from config at startup)
-- [ ] T038 [US3] Add CLI help documentation and examples in `src/voicechanger/cli.py` docstrings
+- [X] T038 [US3] Add CLI help documentation and examples in `src/voicechanger/cli.py` docstrings
 - [ ] T039 [US3] Create CLI reference documentation in `docs/CLI_DEVICE_COMMANDS.md` (list-devices output format, set-device examples, error cases)
 - [ ] T040 [US3] Manual Pi testing for CLI device commands with USB audio hardware (note: may require Pi hardware access)
 
@@ -135,9 +135,9 @@
 ### Implementation for User Story 4
 
 - [ ] T043 [P] [US4] Create systemd target files in `deploy/` for graphical and headless modes (e.g., `voicechanger-graphical.target`, `voicechanger-headless.target`)
-- [ ] T044 [US4] Implement production mode toggle CLI command in `src/voicechanger/cli.py` (calls `deploy/production-mode-toggle.sh` with enable/disable argument)
-- [ ] T045 [US4] Update systemd service file in `deploy/voicechanger.service` to respect headless/graphical target (use `PartOf` and `After` directives)
-- [ ] T046 [US4] Implement production mode toggle script in `deploy/production-mode-toggle.sh` (~50 lines; switches systemd target, updates default runlevel)
+- [X] T044 [US4] Implement production mode toggle CLI command in `src/voicechanger/cli.py` (calls `deploy/production-mode-toggle.sh` with enable/disable argument)
+- [X] T045 [US4] Update systemd service file in `deploy/voicechanger.service` to respect headless/graphical target (use `PartOf` and `After` directives)
+- [X] T046 [US4] Implement production mode toggle script in `deploy/production-mode-toggle.sh` (~50 lines; switches systemd target, updates default runlevel)
 - [ ] T047 [US4] Add production mode documentation in `docs/PRODUCTION_MODE.md` (enable/disable commands, effects, rollback procedure, testing on Pi)
 - [ ] T048 [US4] Manual Pi hardware testing for production mode toggle (requires Pi with X11; verify no desktop loads in headless mode, service runs)
 
@@ -207,9 +207,9 @@
 
 ### Implementation for User Story 7
 
-- [ ] T068 [P] [US7] Create release publication workflow in `.github/workflows/publish-release.yml` (uploads wheels, deb packages, patch, checksums to GitHub release)
-- [ ] T069 [US7] Implement GitHub release body template in `.github/workflows/publish-release.yml` (includes installation instructions, download links, breaking changes section, thanks)
-- [ ] T070 [US7] Add SHA256 checksum verification documentation in release notes (how to verify artifact integrity post-download)
+- [X] T068 [P] [US7] Create release publication workflow in `.github/workflows/publish-release.yml` (uploads wheels, deb packages, patch, checksums to GitHub release)
+- [X] T069 [US7] Implement GitHub release body template in `.github/workflows/publish-release.yml` (includes installation instructions, download links, breaking changes section, thanks)
+- [X] T070 [US7] Add SHA256 checksum verification documentation in release notes (how to verify artifact integrity post-download)
 - [ ] T071 [P] [US7] Create release notes snippets in `docs/RELEASE_ANNOUNCEMENT_TEMPLATE.md` (version highlight, new features, known issues, contact info)
 - [ ] T072 [US7] Manual release test: publish release, verify GitHub release page shows all artifacts, download one wheel and one deb, verify checksums match
 - [ ] T073 [US7] Create release management runbook in `docs/RELEASE_MANAGEMENT.md` (checklist for releases, how to patch hot-fix, rollback if needed)

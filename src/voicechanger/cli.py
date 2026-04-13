@@ -79,7 +79,11 @@ def _build_parser() -> argparse.ArgumentParser:
     device_set_parser.add_argument("device_id", help="Device identifier (card:device or 'default')")
     
     # convenience aliases for device commands
-    subparsers.add_parser("list-devices", help="List audio devices (alias for 'device list')")
+    list_devices_parser = subparsers.add_parser(
+        "list-devices",
+        help="List audio devices (alias for 'device list')",
+    )
+    list_devices_parser.add_argument("--json", action="store_true", help="JSON output")
     
     set_device_parser = subparsers.add_parser("set-device", help="Set active device (alias for 'device set')")
     set_device_parser.add_argument("device_type", choices=["input", "output"], help="Device type")

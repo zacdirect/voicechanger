@@ -8,7 +8,7 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  PEDALBOARD_PATCH: "native/patches/pedalboard.patch"
+  PEDALBOARD_PATCH: "native/patches/0001-add-LivePitchShift.patch"
 
 jobs:
   # Build for all three architectures
