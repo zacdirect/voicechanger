@@ -17,15 +17,15 @@
 
 **Purpose**: Project initialization, packaging, and basic structure
 
-- [ ] T001 Create project directory structure per plan.md (`src/voicechanger/`, `src/voicechanger/gui/`, `tests/unit/`, `tests/contract/`, `tests/integration/`, `native/patches/`, `profiles/builtin/`, `profiles/user/`)
-- [ ] T002 Create `pyproject.toml` with package metadata, dependencies (numpy), optional dev dependencies (pytest, ruff, mypy), and `[tool.pytest]` / `[tool.ruff]` / `[tool.mypy]` configuration
-- [ ] T003 [P] Create `src/voicechanger/__init__.py` with package version constant
-- [ ] T004 [P] Create `src/voicechanger/__main__.py` as entry point (`python -m voicechanger`)
-- [ ] T005 [P] Create `tests/conftest.py` with shared fixtures (tmp profile dirs, sample profile dicts)
-- [ ] T006 [P] Create `.gitignore` with Python patterns (`__pycache__/`, `*.pyc`, `.venv/`, `dist/`, `*.egg-info/`, `.mypy_cache/`)
-- [ ] T007 [P] Create `native/README.md` documenting LivePitchShift patch rationale and build instructions
-- [ ] T008 [P] Create built-in profile files: `profiles/builtin/clean.json`, `profiles/builtin/high-pitched.json`, `profiles/builtin/low-pitched.json` per data-model.md schemas
-- [ ] T009 [P] Create default `voicechanger.toml` config file per data-model.md system configuration schema
+- [X] T001 Create project directory structure per plan.md (`src/voicechanger/`, `src/voicechanger/gui/`, `tests/unit/`, `tests/contract/`, `tests/integration/`, `native/patches/`, `profiles/builtin/`, `profiles/user/`)
+- [X] T002 Create `pyproject.toml` with package metadata, dependencies (numpy), optional dev dependencies (pytest, ruff, mypy), and `[tool.pytest]` / `[tool.ruff]` / `[tool.mypy]` configuration
+- [X] T003 [P] Create `src/voicechanger/__init__.py` with package version constant
+- [X] T004 [P] Create `src/voicechanger/__main__.py` as entry point (`python -m voicechanger`)
+- [X] T005 [P] Create `tests/conftest.py` with shared fixtures (tmp profile dirs, sample profile dicts)
+- [X] T006 [P] Create `.gitignore` with Python patterns (`__pycache__/`, `*.pyc`, `.venv/`, `dist/`, `*.egg-info/`, `.mypy_cache/`)
+- [X] T007 [P] Create `native/README.md` documenting LivePitchShift patch rationale and build instructions
+- [X] T008 [P] Create built-in profile files: `profiles/builtin/clean.json`, `profiles/builtin/high-pitched.json`, `profiles/builtin/low-pitched.json` per data-model.md schemas
+- [X] T009 [P] Create default `voicechanger.toml` config file per data-model.md system configuration schema
 
 ---
 
@@ -35,15 +35,15 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T010 [P] Write unit tests for Profile model in `tests/unit/test_profile.py` — test load/save JSON, validation (name regex, reserved names, schema_version), effect chain parsing, malformed input handling
-- [ ] T011 [P] Write unit tests for effects registry in `tests/unit/test_effects.py` — test type lookup, unknown type handling (skip with warning), parameter validation and clamping
-- [ ] T012 [P] Write unit tests for system config in `tests/unit/test_config.py` — test TOML loading, defaults, missing file handling, invalid values
-- [ ] T013 [P] Write unit tests for ProfileRegistry in `tests/unit/test_registry.py` — test discovery, list, get, create, delete, builtin protection, name collision rejection
-- [ ] T014 Implement Profile model in `src/voicechanger/profile.py` — dataclass with `schema_version`, `name`, `author`, `description`, `effects`; `load()` / `save()` JSON serialization; name validation regex `^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$`
-- [ ] T015 Implement Effect model and type registry in `src/voicechanger/effects.py` — Effect dataclass (`type`, `params`), `EFFECT_REGISTRY` dict mapping type strings to parameter schemas, `validate_effect()`, unknown type skip logic
-- [ ] T016 Implement system config loader in `src/voicechanger/config.py` — load TOML via `tomllib`, provide defaults for all fields, resolve paths (`builtin_dir`, `user_dir`, `socket_path`)
-- [ ] T017 Implement ProfileRegistry in `src/voicechanger/registry.py` — scan builtin/user dirs, `list()`, `get(name)`, `create(profile)`, `delete(name)`, `exists(name)`, `is_builtin(name)`, reject user profiles with builtin names
-- [ ] T018 Verify all foundational unit tests pass: `pytest tests/unit/`
+- [X] T010 [P] Write unit tests for Profile model in `tests/unit/test_profile.py` — test load/save JSON, validation (name regex, reserved names, schema_version), effect chain parsing, malformed input handling
+- [X] T011 [P] Write unit tests for effects registry in `tests/unit/test_effects.py` — test type lookup, unknown type handling (skip with warning), parameter validation and clamping
+- [X] T012 [P] Write unit tests for system config in `tests/unit/test_config.py` — test TOML loading, defaults, missing file handling, invalid values
+- [X] T013 [P] Write unit tests for ProfileRegistry in `tests/unit/test_registry.py` — test discovery, list, get, create, delete, builtin protection, name collision rejection
+- [X] T014 Implement Profile model in `src/voicechanger/profile.py` — dataclass with `schema_version`, `name`, `author`, `description`, `effects`; `load()` / `save()` JSON serialization; name validation regex `^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$`
+- [X] T015 Implement Effect model and type registry in `src/voicechanger/effects.py` — Effect dataclass (`type`, `params`), `EFFECT_REGISTRY` dict mapping type strings to parameter schemas, `validate_effect()`, unknown type skip logic
+- [X] T016 Implement system config loader in `src/voicechanger/config.py` — load TOML via `tomllib`, provide defaults for all fields, resolve paths (`builtin_dir`, `user_dir`, `socket_path`)
+- [X] T017 Implement ProfileRegistry in `src/voicechanger/registry.py` — scan builtin/user dirs, `list()`, `get(name)`, `create(profile)`, `delete(name)`, `exists(name)`, `is_builtin(name)`, reject user profiles with builtin names
+- [X] T018 Verify all foundational unit tests pass: `pytest tests/unit/`
 
 **Checkpoint**: Foundation ready — Profile, Effects, Config, Registry all implemented and tested. User story implementation can begin.
 
@@ -57,16 +57,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T019 [P] [US1] Write unit tests for AudioPipeline in `tests/unit/test_audio_pipeline.py` — test state machine transitions (STOPPED→STARTING→RUNNING→STOPPING), plugin list construction from profile, pass-through fallback on bad profile, profile hot-switch
-- [ ] T020 [P] [US1] Write unit tests for device enumeration in `tests/unit/test_device.py` — test parsing `aplay -l` / `arecord -l` output, default device fallback, preferred device detection
-- [ ] T021 [P] [US1] Write integration test for audio pipeline in `tests/integration/test_audio_pipeline.py` — test full pipeline lifecycle with mock AudioStream (start, apply profile, switch profile, stop)
+- [X] T019 [P] [US1] Write unit tests for AudioPipeline in `tests/unit/test_audio_pipeline.py` — test state machine transitions (STOPPED→STARTING→RUNNING→STOPPING), plugin list construction from profile, pass-through fallback on bad profile, profile hot-switch
+- [X] T020 [P] [US1] Write unit tests for device enumeration in `tests/unit/test_device.py` — test parsing `aplay -l` / `arecord -l` output, default device fallback, preferred device detection
+- [X] T021 [P] [US1] Write integration test for audio pipeline in `tests/integration/test_audio_pipeline.py` — test full pipeline lifecycle with mock AudioStream (start, apply profile, switch profile, stop)
 
 ### Implementation for User Story 1
 
-- [ ] T022 [US1] Implement device enumeration in `src/voicechanger/device.py` — parse `aplay -l`/`arecord -l` subprocess output, list input/output devices, background polling thread for preferred device, `DeviceMonitor` class
-- [ ] T023 [US1] Implement AudioPipeline in `src/voicechanger/audio.py` — `AudioStream` lifecycle management, state machine (STOPPED/STARTING/RUNNING/DEGRADED/SWITCHING_PROFILE/STOPPING), build `Pedalboard` plugin list from Profile, `switch_profile()` via plugins list replacement, pass-through fallback (FR-003)
-- [ ] T024 [US1] Implement service daemon in `src/voicechanger/service.py` — Unix socket server using `selectors`, signal handling (SIGTERM/SIGINT), `threading.Event`-based shutdown, integrate AudioPipeline + ProfileRegistry + DeviceMonitor, IPC command dispatch
-- [ ] T025 [US1] Write contract tests for IPC protocol in `tests/contract/test_ipc.py` — test all 5 IPC commands (`switch_profile`, `list_profiles`, `get_profile`, `get_status`, `reload_profiles`), error codes, JSON-over-newline framing, 64 KB message size limit
+- [X] T022 [US1] Implement device enumeration in `src/voicechanger/device.py` — parse `aplay -l`/`arecord -l` subprocess output, list input/output devices, background polling thread for preferred device, `DeviceMonitor` class
+- [X] T023 [US1] Implement AudioPipeline in `src/voicechanger/audio.py` — `AudioStream` lifecycle management, state machine (STOPPED/STARTING/RUNNING/DEGRADED/SWITCHING_PROFILE/STOPPING), build `Pedalboard` plugin list from Profile, `switch_profile()` via plugins list replacement, pass-through fallback (FR-003)
+- [X] T024 [US1] Implement service daemon in `src/voicechanger/service.py` — Unix socket server using `selectors`, signal handling (SIGTERM/SIGINT), `threading.Event`-based shutdown, integrate AudioPipeline + ProfileRegistry + DeviceMonitor, IPC command dispatch
+- [X] T025 [US1] Write contract tests for IPC protocol in `tests/contract/test_ipc.py` — test all 5 IPC commands (`switch_profile`, `list_profiles`, `get_profile`, `get_status`, `reload_profiles`), error codes, JSON-over-newline framing, 64 KB message size limit
 
 **Checkpoint**: Service starts, opens audio stream, applies profile effects, accepts IPC commands, handles pass-through fallback — all testable without real audio hardware via mocked AudioStream.
 
@@ -80,16 +80,16 @@
 
 ### Tests for User Story 2
 
-- [ ] T026 [P] [US2] Write contract tests for CLI commands in `tests/contract/test_cli.py` — test all 9 CLI commands (serve, profile list/show/switch/create/delete/export, device list, status, process), argument parsing, exit codes, text + JSON output formats
-- [ ] T027 [P] [US2] Write integration test for CLI-to-service flow in `tests/integration/test_service.py` — test CLI profile switch reaching running service, profile create appearing in list, profile delete removing file
+- [X] T026 [P] [US2] Write contract tests for CLI commands in `tests/contract/test_cli.py` — test all 9 CLI commands (serve, profile list/show/switch/create/delete/export, device list, status, process), argument parsing, exit codes, text + JSON output formats
+- [X] T027 [P] [US2] Write integration test for CLI-to-service flow in `tests/integration/test_service.py` — test CLI profile switch reaching running service, profile create appearing in list, profile delete removing file
 
 ### Implementation for User Story 2
 
-- [ ] T028 [US2] Implement CLI framework in `src/voicechanger/cli.py` — argparse-based command routing, `serve` command (delegates to service.py), `profile list/show/create/delete/export` subcommands, `device list`, `status`, `process` commands
-- [ ] T029 [US2] Implement IPC client helper in `src/voicechanger/cli.py` — `_send_ipc_command()` for Unix socket communication with running service, JSON-over-newline framing, connection error handling
-- [ ] T030 [US2] Implement `profile create` logic in `src/voicechanger/cli.py` — parse `--effect TYPE KEY=VALUE` repeatable args, validate via effects registry, construct Profile, save via ProfileRegistry
-- [ ] T031 [US2] Implement `profile export` in `src/voicechanger/cli.py` — read profile from registry, write JSON to output path
-- [ ] T032 [US2] Wire `__main__.py` entry point to CLI in `src/voicechanger/__main__.py`
+- [X] T028 [US2] Implement CLI framework in `src/voicechanger/cli.py` — argparse-based command routing, `serve` command (delegates to service.py), `profile list/show/create/delete/export` subcommands, `device list`, `status`, `process` commands
+- [X] T029 [US2] Implement IPC client helper in `src/voicechanger/cli.py` — `_send_ipc_command()` for Unix socket communication with running service, JSON-over-newline framing, connection error handling
+- [X] T030 [US2] Implement `profile create` logic in `src/voicechanger/cli.py` — parse `--effect TYPE KEY=VALUE` repeatable args, validate via effects registry, construct Profile, save via ProfileRegistry
+- [X] T031 [US2] Implement `profile export` in `src/voicechanger/cli.py` — read profile from registry, write JSON to output path
+- [X] T032 [US2] Wire `__main__.py` entry point to CLI in `src/voicechanger/__main__.py`
 
 **Checkpoint**: Full CLI operational — all profile management commands work, IPC commands reach the service, text and JSON output modes function correctly.
 
@@ -103,12 +103,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T033 [P] [US3] Write unit tests for GUI profile authoring logic in `tests/unit/test_gui.py` — test parameter-to-profile conversion, slider value mapping to effect params, profile save/load round-trip (NO tkinter dependency in tests — test the data logic only)
+- [X] T033 [P] [US3] Write unit tests for GUI profile authoring logic in `tests/unit/test_gui.py` — test parameter-to-profile conversion, slider value mapping to effect params, profile save/load round-trip (NO tkinter dependency in tests — test the data logic only)
 
 ### Implementation for User Story 3
 
-- [ ] T034 [US3] Implement GUI application in `src/voicechanger/gui/app.py` — tkinter window with effect type dropdown, parameter sliders per effect type, add/remove/reorder effects, live audio preview via AudioPipeline, save as profile JSON, profile name/author/description fields
-- [ ] T035 [US3] Create `src/voicechanger/gui/__init__.py` with GUI entry point function
+- [X] T034 [US3] Implement GUI application in `src/voicechanger/gui/app.py` — tkinter window with effect type dropdown, parameter sliders per effect type, add/remove/reorder effects, live audio preview via AudioPipeline, save as profile JSON, profile name/author/description fields
+- [X] T035 [US3] Create `src/voicechanger/gui/__init__.py` with GUI entry point function
 
 **Checkpoint**: GUI launches on dev machine, effects adjustable in real time with audio feedback, profiles saved are compatible with headless service.
 
@@ -122,12 +122,12 @@
 
 ### Tests for User Story 4
 
-- [ ] T036 [P] [US4] Write integration test for profile portability in `tests/integration/test_profile_portability.py` — test export/import round-trip, cross-directory copy, unknown effect type graceful skip with warning
+- [X] T036 [P] [US4] Write integration test for profile portability in `tests/integration/test_profile_portability.py` — test export/import round-trip, cross-directory copy, unknown effect type graceful skip with warning
 
 ### Implementation for User Story 4
 
-- [ ] T037 [US4] Implement `reload_profiles` IPC command handling in `src/voicechanger/service.py` — re-scan profile directories on demand, return updated profile count
-- [ ] T038 [US4] Verify profile portability — ensure Profile model serialization is architecture-independent (no platform-specific paths or binary data), add validation in `profile.py` for unknown schema_version forward compatibility
+- [X] T037 [US4] Implement `reload_profiles` IPC command handling in `src/voicechanger/service.py` — re-scan profile directories on demand, return updated profile count
+- [X] T038 [US4] Verify profile portability — ensure Profile model serialization is architecture-independent (no platform-specific paths or binary data), add validation in `profile.py` for unknown schema_version forward compatibility
 
 **Checkpoint**: Profile files are self-contained, portable, and work across x86_64 and aarch64 without modification.
 
@@ -141,11 +141,11 @@
 
 ### Tests for User Story 5
 
-- [ ] T039 [P] [US5] Write integration test for offline processing in `tests/integration/test_offline_processing.py` — test WAV file processing through profile, output file creation, duration preservation, mono/stereo handling, use stock `PitchShift` (not `LivePitchShift`)
+- [X] T039 [P] [US5] Write integration test for offline processing in `tests/integration/test_offline_processing.py` — test WAV file processing through profile, output file creation, duration preservation, mono/stereo handling, use stock `PitchShift` (not `LivePitchShift`)
 
 ### Implementation for User Story 5
 
-- [ ] T040 [US5] Implement `process` command in `src/voicechanger/cli.py` — read input audio file via pedalboard `ReadableAudioFile`, build offline `Pedalboard` (map `LivePitchShift` → `PitchShift` for offline), process audio, write output via `WritableAudioFile`
+- [X] T040 [US5] Implement `process` command in `src/voicechanger/cli.py` — read input audio file via pedalboard `ReadableAudioFile`, build offline `Pedalboard` (map `LivePitchShift` → `PitchShift` for offline), process audio, write output via `WritableAudioFile`
 
 **Checkpoint**: `voicechanger process input.wav output.wav --profile darth-vader` produces correct output file without requiring running service.
 
@@ -155,11 +155,11 @@
 
 **Purpose**: Quality, reliability, and deployment readiness
 
-- [ ] T041 [P] Add structured JSON logging throughout service in `src/voicechanger/service.py` — configure `logging` with JSON formatter, log profile changes, device events, errors, startup/shutdown (FR-012)
-- [ ] T042 [P] Create systemd service unit file in `deploy/voicechanger.service` — `Type=simple`, `Restart=on-failure`, `RestartSec=5`, `ExecStart=voicechanger serve --config /etc/voicechanger/voicechanger.toml` (FR-002, SC-007)
-- [ ] T043 [P] Create `src/py.typed` marker file for PEP 561 type checking support
-- [ ] T044 Run full test suite and fix any failures: `cd src && pytest && ruff check .`
-- [ ] T045 Run quickstart.md validation — verify all documented commands work end-to-end
+- [X] T041 [P] Add structured JSON logging throughout service in `src/voicechanger/service.py` — configure `logging` with JSON formatter, log profile changes, device events, errors, startup/shutdown (FR-012)
+- [X] T042 [P] Create systemd service unit file in `deploy/voicechanger.service` — `Type=simple`, `Restart=on-failure`, `RestartSec=5`, `ExecStart=voicechanger serve --config /etc/voicechanger/voicechanger.toml` (FR-002, SC-007)
+- [X] T043 [P] Create `src/py.typed` marker file for PEP 561 type checking support
+- [X] T044 Run full test suite and fix any failures: `cd src && pytest && ruff check .`
+- [X] T045 Run quickstart.md validation — verify all documented commands work end-to-end
 
 ---
 

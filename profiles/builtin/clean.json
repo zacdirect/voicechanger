@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "name": "clean",
+  "author": "voicechanger",
+  "description": "Pass-through — no effects applied",
+  "effects": []
+}

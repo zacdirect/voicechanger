@@ -1,0 +1,15 @@
+[Unit]
+Description=Voice Changer real-time audio effect service
+After=sound.target
+
+[Service]
+Type=simple
+ExecStart=voicechanger serve --config /etc/voicechanger/voicechanger.toml
+Restart=on-failure
+RestartSec=5
+User=voicechanger
+Group=audio
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "name": "low-pitched",
+  "author": "voicechanger",
+  "description": "Deep, lowered voice",
+  "effects": [
+    {
+      "type": "LivePitchShift",
+      "params": { "semitones": -6.0 }
+    },
+    {
+      "type": "Gain",
+      "params": { "gain_db": 2.0 }
+    }
+  ]
+}

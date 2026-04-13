@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "name": "high-pitched",
+  "author": "voicechanger",
+  "description": "Chipmunk-style high pitch shift",
+  "effects": [
+    {
+      "type": "LivePitchShift",
+      "params": { "semitones": 6.0 }
+    },
+    {
+      "type": "Gain",
+      "params": { "gain_db": -2.0 }
+    }
+  ]
+}
