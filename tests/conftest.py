@@ -2,6 +2,61 @@
 
 from __future__ import annotations
 
+# ---------------------------------------------------------------------------
+# Stub pedalboard for CI environments without audio hardware / native libs.
+# Must run before any test import triggers voicechanger.audio lazy imports.
+# ---------------------------------------------------------------------------
+import sys as _sys
+import types as _types
+
+try:
+    import pedalboard as _pb_real  # noqa: F401
+except ImportError:
+
+    class _StubPlugin:
+        """Generic stand-in for any pedalboard effect."""
+
+        def __init__(self, **kwargs: object) -> None:
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+
+    class _Pedalboard(list):  # type: ignore[type-arg]
+        """Stand-in for pedalboard.Pedalboard."""
+
+        def __init__(self, plugins: list[object] | None = None) -> None:
+            super().__init__(plugins or [])
+
+        def __call__(self, audio: object, sample_rate: object) -> object:
+            """Pass-through: return audio unchanged (no real DSP)."""
+            return audio
+
+    class _AudioStream:
+        """Stand-in for pedalboard.io.AudioStream."""
+
+        default_input_device_name = "Stub Input"
+        default_output_device_name = "Stub Output"
+        input_device_names = ["Stub Input"]
+        output_device_names = ["Stub Output"]
+
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+    _pb = _types.ModuleType("pedalboard")
+    _pb.Pedalboard = _Pedalboard  # type: ignore[attr-defined]
+    _pb.Gain = type("Gain", (_StubPlugin,), {})  # type: ignore[attr-defined]
+    _pb.Reverb = type("Reverb", (_StubPlugin,), {})  # type: ignore[attr-defined]
+    _pb.PitchShift = type("PitchShift", (_StubPlugin,), {})  # type: ignore[attr-defined]
+    # LivePitchShift intentionally omitted — mirrors the vendored build where
+    # it may be absent, so fallback-to-PitchShift logic is exercised.
+
+    _pb_io = _types.ModuleType("pedalboard.io")
+    _pb_io.AudioStream = _AudioStream  # type: ignore[attr-defined]
+    _pb.io = _pb_io  # type: ignore[attr-defined]
+
+    _sys.modules["pedalboard"] = _pb
+    _sys.modules["pedalboard.io"] = _pb_io
+# ---------------------------------------------------------------------------
+
 import json
 from pathlib import Path
 from typing import Any
