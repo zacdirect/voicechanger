@@ -6,9 +6,6 @@ on:
       - main
   workflow_dispatch:  # Allow manual triggering
 
-env:
-  PYTHON_VERSION: "3.11"
-
 jobs:
   quality:
     runs-on: ubuntu-22.04
@@ -17,7 +14,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: "3.14"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -27,15 +24,17 @@ jobs:
       - name: Test
         run: pytest --tb=short -q
 
-  # Build for both architectures using the reusable workflow
+  # Build for both architectures × both Python versions
   build:
     needs: quality
     strategy:
       matrix:
         arch: [x86_64, aarch64]
+        python-version: ["3.12", "3.14"]
     uses: ./.github/workflows/build-linux.yml
     with:
       arch: ${{ matrix.arch }}
+      python-version: ${{ matrix.python-version }}
 
   # Publish release
   publish-release:
@@ -88,8 +87,10 @@ jobs:
             | File | Description |
             |------|-------------|
             | `voicechanger-*.whl` | Pure-Python wheel (all platforms) |
-            | `pedalboard-*_x86_64.whl` | Patched pedalboard with LivePitchShift (x86_64) |
-            | `pedalboard-*_aarch64.whl` | Patched pedalboard with LivePitchShift (aarch64 / Pi 3+) |
+            | `pedalboard-*cp312*_x86_64.whl` | Patched pedalboard for Python 3.12 (x86_64) |
+            | `pedalboard-*cp312*_aarch64.whl` | Patched pedalboard for Python 3.12 (aarch64 / Pi) |
+            | `pedalboard-*cp314*_x86_64.whl` | Patched pedalboard for Python 3.14 (x86_64) |
+            | `pedalboard-*cp314*_aarch64.whl` | Patched pedalboard for Python 3.14 (aarch64 / Pi) |
             | `voicechanger_*_<arch>.deb` | All-in-one Debian package (Pi or Ubuntu) |
 
             ## Installation

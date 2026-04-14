@@ -27,9 +27,10 @@ echo "Creating virtualenv and installing wheels..."
 python3 -m venv "$INSTALL_DIR/venv"
 "$INSTALL_DIR/venv/bin/pip" install --upgrade pip --quiet
 "$INSTALL_DIR/venv/bin/pip" install --no-index --find-links "$INSTALL_DIR/wheels" \
-    voicechanger pedalboard 2>/dev/null \
+    "$INSTALL_DIR/wheels"/voicechanger-*.whl \
+    "$INSTALL_DIR/wheels"/pedalboard-*.whl 2>/dev/null \
   || "$INSTALL_DIR/venv/bin/pip" install --no-index --find-links "$INSTALL_DIR/wheels" \
-    voicechanger
+    "$INSTALL_DIR/wheels"/voicechanger-*.whl
 
 # ── Enable systemd service ──
 if command -v systemctl > /dev/null; then

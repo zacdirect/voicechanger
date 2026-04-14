@@ -7,17 +7,21 @@
 # Prerequisites: fpm (installed by the CI workflow), wheels already in dist/.
 #
 # Usage:
-#   ./build-deb.sh <arch>
+#   ./build-deb.sh <arch> <python-version>
 #
 # Example:
-#   ./build-deb.sh aarch64
+#   ./build-deb.sh aarch64 3.12
 
 set -euo pipefail
 
-ARCH="${1:?Usage: build-deb.sh <arch>}"
+ARCH="${1:?Usage: build-deb.sh <arch> <python-version>}"
+PYVER="${2:?Usage: build-deb.sh <arch> <python-version>}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIST="$PROJECT_ROOT/dist"
 STAGE="$PROJECT_ROOT/dist/deb-staging"
+
+# Short Python tag for filenames (e.g. "3.12" -> "py312")
+PYTAG="py${PYVER//./}"
 
 # ── Map to Debian architecture names ──
 case "$ARCH" in
@@ -38,7 +42,7 @@ if [[ -z "$PB_WHEEL" ]]; then
 fi
 
 VERSION=$(echo "$(basename "$VC_WHEEL")" | cut -d'-' -f2)
-echo "Building .deb  arch=$DEB_ARCH  version=$VERSION"
+echo "Building .deb  arch=$DEB_ARCH  version=$VERSION  python=$PYVER"
 
 # ── Stage files ──
 rm -rf "$STAGE"
@@ -46,8 +50,8 @@ mkdir -p "$STAGE/opt/voicechanger/wheels"
 mkdir -p "$STAGE/etc/systemd/system"
 mkdir -p "$STAGE/usr/local/bin"
 
-cp "$VC_WHEEL" "$STAGE/opt/voicechanger/wheels/"
-[[ -n "$PB_WHEEL" ]] && cp "$PB_WHEEL" "$STAGE/opt/voicechanger/wheels/"
+# Bundle ALL wheels (voicechanger + pedalboard + transitive deps like numpy, flet, sounddevice)
+cp "$DIST"/*.whl "$STAGE/opt/voicechanger/wheels/"
 
 # Systemd unit
 cp "$PROJECT_ROOT/deploy/voicechanger.service" "$STAGE/etc/systemd/system/"
@@ -69,19 +73,21 @@ chmod 755 "$STAGE/usr/local/bin/voicechanger-gui"
 fpm \
   -s dir \
   -t deb \
-  -n voicechanger \
+  -n "voicechanger-${PYTAG}" \
   -v "$VERSION" \
   -a "$DEB_ARCH" \
-  --description "Real-time voice changer for Raspberry Pi using Pedalboard" \
+  --description "Real-time voice changer for Raspberry Pi using Pedalboard (Python $PYVER)" \
   --url "https://github.com/zac/voicechanger" \
   --license "MIT" \
-  --depends "python3 (>= 3.11)" \
+  --depends "python3 (>= $PYVER)" \
   --depends "python3-venv" \
   --depends "libsndfile1" \
   --depends "libasound2" \
+  --conflicts "voicechanger-py312" \
+  --conflicts "voicechanger-py314" \
   --after-install "$PROJECT_ROOT/scripts/release/post-install.sh" \
   --before-remove "$PROJECT_ROOT/scripts/release/pre-remove.sh" \
-  --package "$DIST/voicechanger_${VERSION}_${DEB_ARCH}.deb" \
+  --package "$DIST/voicechanger_${VERSION}_${PYTAG}_${DEB_ARCH}.deb" \
   -C "$STAGE" \
   .
 

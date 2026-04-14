@@ -7,6 +7,10 @@ on:
         required: true
         type: string
         description: "Target architecture: x86_64 or aarch64"
+      python-version:
+        required: true
+        type: string
+        description: "Python version to build against (e.g. 3.12, 3.14)"
 
 jobs:
   build:
@@ -19,7 +23,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ inputs.python-version }}
 
       - name: Install host tools
         run: |
@@ -69,16 +73,25 @@ jobs:
           echo "Pedalboard wheel built:"
           ls -lh ../../dist/pedalboard-*.whl
 
-      # ── Debian package (bundles both wheels + systemd service) ──
+      # ── Download transitive dependencies so the .deb is fully offline ──
+      - name: Download dependency wheels
+        run: |
+          pip download --dest dist/ --find-links dist/ \
+            --only-binary :all: \
+            numpy flet sounddevice
+          echo "All wheels in dist/:"
+          ls -lh dist/*.whl
+
+      # ── Debian package (bundles all wheels + systemd service) ──
       - name: Build .deb package
         run: |
           chmod +x scripts/release/build-deb.sh
-          scripts/release/build-deb.sh "${{ inputs.arch }}"
+          scripts/release/build-deb.sh "${{ inputs.arch }}" "${{ inputs.python-version }}"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: release-${{ inputs.arch }}
+          name: release-${{ inputs.arch }}-py${{ inputs.python-version }}
           path: |
             dist/*.whl
             dist/*.deb
