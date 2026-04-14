@@ -87,8 +87,8 @@ fpm \
   --description "Real-time voice changer for Raspberry Pi using Pedalboard (Python $PYVER)" \
   --url "https://github.com/zac/voicechanger" \
   --license "MIT" \
-  --depends "python3 (>= $PYVER)" \
-  --depends "python3-venv" \
+  --depends "python${PYVER}" \
+  --depends "python${PYVER}-venv" \
   --depends "libsndfile1" \
   --depends "libasound2" \
   --conflicts "voicechanger-py312" \
