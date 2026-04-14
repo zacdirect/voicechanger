@@ -67,11 +67,44 @@ def _build_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("name", help="Profile name to export")
     export_parser.add_argument("--output", default=None, help="Output file path")
 
-    # device
-    device_parser = subparsers.add_parser("device", help="Device management")
-    device_sub = device_parser.add_subparsers(dest="device_command")
+    # device management
+    device_parser = subparsers.add_parser(
+        "device",
+        help="Device management (alias: list-devices)",
+    )
+    device_sub = device_parser.add_subparsers(dest="device_command", required=False)
+
     device_list_parser = device_sub.add_parser("list", help="List audio devices")
     device_list_parser.add_argument("--json", action="store_true", help="JSON output")
+
+    device_set_parser = device_sub.add_parser("set", help="Set active device")
+    device_set_parser.add_argument("device_type", choices=["input", "output"], help="Device type")
+    device_set_parser.add_argument("device_id", help="Device identifier (card:device or 'default')")
+
+    # convenience aliases for device commands
+    list_devices_parser = subparsers.add_parser(
+        "list-devices",
+        help="List audio devices (alias for 'device list')",
+    )
+    list_devices_parser.add_argument("--json", action="store_true", help="JSON output")
+
+    set_device_parser = subparsers.add_parser(
+        "set-device",
+        help="Set active device (alias for 'device set')",
+    )
+    set_device_parser.add_argument("device_type", choices=["input", "output"], help="Device type")
+    set_device_parser.add_argument("device_id", help="Device identifier (card:device or 'default')")
+
+    # production mode
+    production_parser = subparsers.add_parser(
+        "production-mode",
+        help="Toggle headless production mode",
+    )
+    production_parser.add_argument(
+        "state",
+        choices=["enable", "disable"],
+        help="Enable or disable production mode",
+    )
 
     # status
     status_parser = subparsers.add_parser("status", help="Show service status")
@@ -374,6 +407,67 @@ def _cmd_device_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_device_set(args: argparse.Namespace) -> int:
+    """Set the active audio device."""
+    config = _get_config()
+
+    # Validate device exists if not 'default'
+    if args.device_id != "default":
+        from voicechanger.device import DeviceMonitor
+
+        monitor = DeviceMonitor()
+        devices = (
+            monitor.list_input_devices()
+            if args.device_type == "input"
+            else monitor.list_output_devices()
+        )
+        device_ids = [f"{d['card']}:{d['device']}" for d in devices]
+        if args.device_id not in device_ids and args.device_id != "default":
+            print(f"Error: Device '{args.device_id}' not found", file=sys.stderr)
+            print(f"Available {args.device_type} devices: {', '.join(device_ids)}", file=sys.stderr)
+            return 1
+
+    # Save device selection to config
+    if args.device_type == "input":
+        config.audio.device_input = args.device_id
+    else:
+        config.audio.device_output = args.device_id
+
+    save_config(Path("voicechanger.toml"), config)
+    print(f"Set {args.device_type} device to: {args.device_id}")
+    return 0
+
+
+def _cmd_production_mode(args: argparse.Namespace) -> int:
+    """Toggle production mode (headless vs. desktop)."""
+    import subprocess
+
+    script_path = (
+        Path(__file__).resolve().parent.parent.parent
+        / "deploy"
+        / "production-mode-toggle.sh"
+    )
+
+    if not script_path.exists():
+        print(f"Error: production-mode-toggle.sh not found at {script_path}", file=sys.stderr)
+        print("Install the deb package to use this command", file=sys.stderr)
+        return 1
+
+    try:
+        # Run the toggle script
+        result = subprocess.run(
+            ["sudo", str(script_path), args.state],
+            check=False,
+        )
+        return result.returncode
+    except PermissionError:
+        print("Error: This command requires sudo access", file=sys.stderr)
+        return 1
+    except FileNotFoundError:
+        print("Error: sudo command not found", file=sys.stderr)
+        return 1
+
+
 def _cmd_status(args: argparse.Namespace) -> int:
     """Show service status."""
     config = _get_config()
@@ -465,6 +559,19 @@ def _cmd_gui(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_device_routing(args: argparse.Namespace) -> int:
+    """Route device commands to correct handler based on sub-command."""
+    device_command = getattr(args, "device_command", None)
+
+    if device_command == "list":
+        return _cmd_device_list(args)
+    elif device_command == "set":
+        return _cmd_device_set(args)
+    else:
+        # Default to list if no sub-command specified
+        return _cmd_device_list(args)
+
+
 def main(argv: list[str] | None = None) -> NoReturn:
     """Main CLI entry point."""
     parser = _build_parser()
@@ -476,7 +583,10 @@ def main(argv: list[str] | None = None) -> NoReturn:
 
     command_handlers: dict[str, Any] = {
         "serve": _cmd_serve,
-        "device": _cmd_device_list,
+        "device": lambda a: _cmd_device_routing(a),  # Route to sub-command
+        "list-devices": lambda a: _cmd_device_list(a),  # Alias for 'device list'
+        "set-device": lambda a: _cmd_device_set(a),  # Alias for 'device set'
+        "production-mode": _cmd_production_mode,
         "status": _cmd_status,
         "monitor": _cmd_monitor,
         "process": _cmd_process,

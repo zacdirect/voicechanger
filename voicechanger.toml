@@ -11,7 +11,7 @@ device_mode = "flexible"
 [profiles]
 builtin_dir = "profiles/builtin"
 user_dir = "profiles/user"
-active_profile = "clean"
+active_profile = "high-pitched"
 
 [service]
 socket_path = ""

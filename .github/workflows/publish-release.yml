@@ -1,0 +1,83 @@
+name: Publish GitHub Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to publish (e.g. v0.2.0)
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+jobs:
+  quality:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+      - name: Lint
+        run: ruff check src tests
+      - name: Test
+        run: pytest --tb=short -q
+
+  publish:
+    needs: quality
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+
+      - name: Collect release artifacts
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.whl' -o -name '*.deb' \) -exec cp {} release-assets/ \;
+          cp native/patches/0001-add-LivePitchShift.patch release-assets/
+          (cd release-assets && sha256sum * > SHA256SUMS)
+          ls -lah release-assets
+
+      - name: Create release body
+        run: |
+          cat > release-notes.md <<'EOF'
+          ## Voicechanger release
+
+          This release contains:
+          - Wheels for x86_64, aarch64, armv7l
+          - Debian packages (when available)
+          - `pedalboard.patch`
+          - `SHA256SUMS`
+
+          ### Install
+          Use wheel or deb assets from this release.
+
+          ### Verify
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+          EOF
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag }}
+          body_path: release-notes.md
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
