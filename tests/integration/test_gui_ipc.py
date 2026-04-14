@@ -62,7 +62,7 @@ class TestGuiIpcIntegration:
             assert result["data"]["active_profile"] == "clean"
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_set_monitor_roundtrip(
         self, running_service: tuple[Service, str]
@@ -83,7 +83,7 @@ class TestGuiIpcIntegration:
 
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_switch_profile_roundtrip(
         self, running_service: tuple[Service, str]
@@ -104,4 +104,4 @@ class TestGuiIpcIntegration:
 
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())

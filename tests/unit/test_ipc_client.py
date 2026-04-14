@@ -117,16 +117,22 @@ class TestIpcClientConnect:
     """Test IpcClient connection behavior."""
 
     def test_connect_to_running_service(self, echo_server: str) -> None:
-        client = IpcClient()
-        result = asyncio.get_event_loop().run_until_complete(client.connect(echo_server))
-        assert result is True
-        asyncio.get_event_loop().run_until_complete(client.close())
+        async def _test() -> None:
+            client = IpcClient()
+            result = await client.connect(echo_server)
+            assert result is True
+            await client.close()
+
+        asyncio.run(_test())
 
     def test_connect_to_nonexistent_socket(self, tmp_path: Any) -> None:
-        client = IpcClient()
-        path = str(tmp_path / "nonexistent.sock")
-        result = asyncio.get_event_loop().run_until_complete(client.connect(path))
-        assert result is False
+        async def _test() -> None:
+            client = IpcClient()
+            path = str(tmp_path / "nonexistent.sock")
+            result = await client.connect(path)
+            assert result is False
+
+        asyncio.run(_test())
 
 
 class TestIpcClientCommands:
@@ -141,7 +147,7 @@ class TestIpcClientCommands:
             assert result["data"]["state"] == "RUNNING"
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_switch_profile(self, echo_server: str) -> None:
         async def _test() -> None:
@@ -152,7 +158,7 @@ class TestIpcClientCommands:
             assert result["data"]["profile"] == "high-pitched"
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_list_profiles(self, echo_server: str) -> None:
         async def _test() -> None:
@@ -163,7 +169,7 @@ class TestIpcClientCommands:
             assert "profiles" in result["data"]
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_get_profile(self, echo_server: str) -> None:
         async def _test() -> None:
@@ -174,7 +180,7 @@ class TestIpcClientCommands:
             assert result["data"]["name"] == "clean"
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_reload_profiles(self, echo_server: str) -> None:
         async def _test() -> None:
@@ -185,7 +191,7 @@ class TestIpcClientCommands:
             assert result["data"]["profiles_count"] == 3
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_set_monitor(self, echo_server: str) -> None:
         async def _test() -> None:
@@ -196,7 +202,7 @@ class TestIpcClientCommands:
             assert result["data"]["monitor_enabled"] is True
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_set_device(self, echo_server: str) -> None:
         async def _test() -> None:
@@ -207,7 +213,7 @@ class TestIpcClientCommands:
             assert result["data"]["restarted"] is True
             await client.close()
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
 
 class TestIpcClientErrorHandling:
@@ -220,9 +226,12 @@ class TestIpcClientErrorHandling:
             assert result["ok"] is False
             assert "error" in result
 
-        asyncio.get_event_loop().run_until_complete(_test())
+        asyncio.run(_test())
 
     def test_close_without_connect(self) -> None:
         """Closing without connecting should not raise."""
-        client = IpcClient()
-        asyncio.get_event_loop().run_until_complete(client.close())
+        async def _test() -> None:
+            client = IpcClient()
+            await client.close()
+
+        asyncio.run(_test())
