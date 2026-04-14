@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         arch: [x86_64, aarch64]
-        python-version: ["3.12", "3.14"]
+        python-version: ["3.12", "3.13", "3.14"]
     uses: ./.github/workflows/build-linux.yml
     with:
       arch: ${{ matrix.arch }}
@@ -89,6 +89,8 @@ jobs:
             | `voicechanger-*.whl` | Pure-Python wheel (all platforms) |
             | `pedalboard-*cp312*_x86_64.whl` | Patched pedalboard for Python 3.12 (x86_64) |
             | `pedalboard-*cp312*_aarch64.whl` | Patched pedalboard for Python 3.12 (aarch64 / Pi) |
+            | `pedalboard-*cp313*_x86_64.whl` | Patched pedalboard for Python 3.13 (x86_64) |
+            | `pedalboard-*cp313*_aarch64.whl` | Patched pedalboard for Python 3.13 (aarch64 / Pi) |
             | `pedalboard-*cp314*_x86_64.whl` | Patched pedalboard for Python 3.14 (x86_64) |
             | `pedalboard-*cp314*_aarch64.whl` | Patched pedalboard for Python 3.14 (aarch64 / Pi) |
             | `voicechanger_*_<arch>.deb` | All-in-one Debian package (Pi or Ubuntu) |
