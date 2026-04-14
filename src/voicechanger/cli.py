@@ -169,10 +169,10 @@ def _send_ipc_command(
 
 def _get_registry(config: Config) -> ProfileRegistry:
     """Create a ProfileRegistry from config."""
-    resolve_profile_dirs(config)
+    resolved = resolve_profile_dirs(config)
     return ProfileRegistry(
-        builtin_dir=Path(config.profiles.builtin_dir),
-        user_dir=Path(config.profiles.user_dir),
+        builtin_dir=Path(resolved.profiles.builtin_dir),
+        user_dir=Path(resolved.profiles.user_dir),
     )
 
 

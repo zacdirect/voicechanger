@@ -36,10 +36,10 @@ class Service:
     def __init__(self, config: Config) -> None:
         self._config = config
         self._pipeline = AudioPipeline()
-        resolve_profile_dirs(config)
+        _resolved = resolve_profile_dirs(config)
         self._registry = ProfileRegistry(
-            builtin_dir=Path(config.profiles.builtin_dir),
-            user_dir=Path(config.profiles.user_dir),
+            builtin_dir=Path(_resolved.profiles.builtin_dir),
+            user_dir=Path(_resolved.profiles.user_dir),
         )
         self._socket_path = _resolve_socket_path(config.service.socket_path)
         self._shutdown_event = threading.Event()

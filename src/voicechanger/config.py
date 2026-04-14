@@ -134,10 +134,17 @@ def _resolve_dir(raw: str) -> str:
 
 
 def resolve_profile_dirs(config: Config) -> Config:
-    """Resolve relative profile directories against the package root."""
-    config.profiles.builtin_dir = _resolve_dir(config.profiles.builtin_dir)
-    config.profiles.user_dir = _resolve_dir(config.profiles.user_dir)
-    return config
+    """Return a copy of config with relative profile dirs resolved against the package root.
+
+    The original config is not mutated, so save_config will still write
+    relative paths to disk.
+    """
+    import copy
+    resolved = copy.copy(config)
+    resolved.profiles = copy.copy(config.profiles)
+    resolved.profiles.builtin_dir = _resolve_dir(config.profiles.builtin_dir)
+    resolved.profiles.user_dir = _resolve_dir(config.profiles.user_dir)
+    return resolved
 
 
 def save_config(path: Path, config: Config) -> None:

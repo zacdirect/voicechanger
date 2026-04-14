@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import signal
@@ -245,10 +246,8 @@ def launch_gui() -> None:
         # Raspberry Pi's VideoCore GPU lacks Vulkan support for Flutter's
         # Impeller renderer, so fall back to the browser-based UI.
         _is_pi = False
-        try:
-            _is_pi = "Raspberry Pi" in open("/proc/device-tree/model").read()
-        except OSError:
-            pass
+        with contextlib.suppress(OSError), open("/proc/device-tree/model") as _f:
+            _is_pi = "Raspberry Pi" in _f.read()
         if _is_pi:
             logger.info("Raspberry Pi detected — launching GUI in web browser")
             ft.app(target=_start, view=ft.AppView.WEB_BROWSER)
