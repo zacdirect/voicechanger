@@ -23,8 +23,11 @@ mkdir -p /etc/voicechanger /var/lib/voicechanger
 chown -R voicechanger:audio /var/lib/voicechanger 2>/dev/null || true
 
 # ── Virtual environment + wheel install ──
-echo "Creating virtualenv and installing wheels..."
-python3 -m venv "$INSTALL_DIR/venv"
+# VOICECHANGER_PYTHON is set by the .deb post-install wrapper to the
+# exact interpreter that matches the bundled wheels (e.g. python3.14).
+PYTHON="${VOICECHANGER_PYTHON:-python3}"
+echo "Creating virtualenv with $PYTHON..."
+"$PYTHON" -m venv "$INSTALL_DIR/venv"
 "$INSTALL_DIR/venv/bin/pip" install --upgrade pip --quiet
 "$INSTALL_DIR/venv/bin/pip" install --no-index --find-links "$INSTALL_DIR/wheels" \
     "$INSTALL_DIR/wheels"/voicechanger-*.whl \

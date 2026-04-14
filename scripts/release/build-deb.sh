@@ -69,6 +69,14 @@ exec /opt/voicechanger/venv/bin/python -m voicechanger gui "$@"
 WRAPPER
 chmod 755 "$STAGE/usr/local/bin/voicechanger-gui"
 
+# ── Generate post-install that pins the Python version ──
+# Prepend the VOICECHANGER_PYTHON export, then inline the real
+# post-install.sh so fpm embeds a fully self-contained script.
+POST_INSTALL_WRAPPER="$STAGE/post-install-wrapper.sh"
+printf '#!/bin/bash\nexport VOICECHANGER_PYTHON=python%s\n' "$PYVER" > "$POST_INSTALL_WRAPPER"
+cat "$PROJECT_ROOT/scripts/release/post-install.sh" >> "$POST_INSTALL_WRAPPER"
+chmod 755 "$POST_INSTALL_WRAPPER"
+
 # ── Build .deb with fpm ──
 fpm \
   -s dir \
@@ -85,7 +93,7 @@ fpm \
   --depends "libasound2" \
   --conflicts "voicechanger-py312" \
   --conflicts "voicechanger-py314" \
-  --after-install "$PROJECT_ROOT/scripts/release/post-install.sh" \
+  --after-install "$POST_INSTALL_WRAPPER" \
   --before-remove "$PROJECT_ROOT/scripts/release/pre-remove.sh" \
   --package "$DIST/voicechanger_${VERSION}_${PYTAG}_${DEB_ARCH}.deb" \
   -C "$STAGE" \
