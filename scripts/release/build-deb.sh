@@ -1,84 +1,91 @@
 #!/bin/bash
-# Build Debian package for voicechanger
+# Build Debian package for voicechanger.
+#
+# Bundles the voicechanger wheel, the patched pedalboard wheel, the systemd
+# service unit, and post-install / pre-remove scripts into a single .deb.
+#
+# Prerequisites: fpm (installed by the CI workflow), wheels already in dist/.
 #
 # Usage:
-#   ./build-deb.sh [--install-dir /tmp/voicechanger-deb]
+#   ./build-deb.sh <arch>
 #
-# Creates a .deb package suitable for installation on Ubuntu 22.04+ and Raspberry Pi OS
-# Generates both wheel and deb formats.
+# Example:
+#   ./build-deb.sh aarch64
 
-set -e
+set -euo pipefail
 
-ARCH=${1:-$(dpkg --print-architecture)}
-INSTALL_DIR=${2:-.}
+ARCH="${1:?Usage: build-deb.sh <arch>}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+DIST="$PROJECT_ROOT/dist"
+STAGE="$PROJECT_ROOT/dist/deb-staging"
 
-echo "Building Debian package for arch: $ARCH"
-echo "Install directory: $INSTALL_DIR"
-cd "$PROJECT_ROOT"
+# ── Map to Debian architecture names ──
+case "$ARCH" in
+  x86_64)  DEB_ARCH="amd64" ;;
+  aarch64) DEB_ARCH="arm64" ;;
+  armv7l)  DEB_ARCH="armhf" ;;
+  *)       echo "ERROR: unsupported arch: $ARCH" >&2; exit 1 ;;
+esac
 
-# Ensure we have the necessary build tools
-if ! command -v python3 &> /dev/null; then
-    echo "ERROR: python3 not found" >&2
-    exit 1
+# ── Verify wheels exist ──
+VC_WHEEL=$(find "$DIST" -maxdepth 1 -name 'voicechanger-*.whl' | head -1)
+PB_WHEEL=$(find "$DIST" -maxdepth 1 -name 'pedalboard-*.whl' | head -1)
+
+if [[ -z "$VC_WHEEL" ]]; then
+  echo "ERROR: voicechanger wheel not found in $DIST" >&2; exit 1
+fi
+if [[ -z "$PB_WHEEL" ]]; then
+  echo "WARNING: pedalboard wheel not found — .deb will not include it" >&2
 fi
 
-if ! python3 -m pip show build &> /dev/null; then
-    echo "Installing build tool..."
-    python3 -m pip install --user build
-fi
+VERSION=$(echo "$(basename "$VC_WHEEL")" | cut -d'-' -f2)
+echo "Building .deb  arch=$DEB_ARCH  version=$VERSION"
 
-# Build wheel first
-echo "Building wheel..."
-python3 -m build --wheel --outdir dist/
+# ── Stage files ──
+rm -rf "$STAGE"
+mkdir -p "$STAGE/opt/voicechanger/wheels"
+mkdir -p "$STAGE/etc/systemd/system"
+mkdir -p "$STAGE/usr/local/bin"
 
-# Convert wheel to deb using fpm (if available) or setuptools bdist_deb
-if command -v fpm &> /dev/null; then
-    echo "Building deb package using fpm..."
-    
-    WHEEL_FILE=$(ls -1 dist/*.whl | head -1)
-    WHEEL_NAME=$(basename "$WHEEL_FILE")
-    VERSION=$(echo "$WHEEL_NAME" | cut -d'-' -f2)
-    
-    fpm \
-        -s python \
-        -t deb \
-        --python-bin python3 \
-        --python-package-name-template "voicechanger" \
-        --depends "python3 (>= 3.11)" \
-        --depends "python3-numpy" \
-        --depends "python3-flet" \
-        --depends "python3-sounddevice" \
-        --depends "systemd" \
-        --rpm-dist el7 \
-        --deb-systemd deploy/voicechanger.service \
-        --deb-user voicechanger \
-        --deb-group audio \
-        --after-install scripts/release/post-install.sh \
-        --before-remove scripts/release/pre-remove.sh \
-        --description "Real-time voice changer for Raspberry Pi using Pedalboard" \
-        --url "https://github.com/example/voicechanger" \
-        --maintainer "Your Name <you@example.com>" \
-        "$WHEEL_FILE"
-    
-    echo "✓ Generated deb package"
-    
-else
-    echo "fpm not found, using setuptools bdist_deb..."
-    python3 -m pip install wheel setuptools-deb 2>/dev/null || true
-    
-    python3 setup.py bdist_deb 2>/dev/null || {
-        echo "⚠ bdist_deb not available; wheel package generated but deb requires fpm"
-        echo "  Install fpm on your system to generate .deb packages"
-        exit 1
-    }
-fi
+cp "$VC_WHEEL" "$STAGE/opt/voicechanger/wheels/"
+[[ -n "$PB_WHEEL" ]] && cp "$PB_WHEEL" "$STAGE/opt/voicechanger/wheels/"
 
-# Move all artifacts to output directory
-mkdir -p "$INSTALL_DIR"
-cp dist/*.whl "$INSTALL_DIR/" 2>/dev/null || true
-cp dist/*.deb "$INSTALL_DIR/" 2>/dev/null || true
+# Systemd unit
+cp "$PROJECT_ROOT/deploy/voicechanger.service" "$STAGE/etc/systemd/system/"
+
+# Wrapper scripts (installed to PATH)
+cat > "$STAGE/usr/local/bin/voicechanger" <<'WRAPPER'
+#!/bin/bash
+exec /opt/voicechanger/venv/bin/python -m voicechanger "$@"
+WRAPPER
+chmod 755 "$STAGE/usr/local/bin/voicechanger"
+
+cat > "$STAGE/usr/local/bin/voicechanger-gui" <<'WRAPPER'
+#!/bin/bash
+exec /opt/voicechanger/venv/bin/python -m voicechanger gui "$@"
+WRAPPER
+chmod 755 "$STAGE/usr/local/bin/voicechanger-gui"
+
+# ── Build .deb with fpm ──
+fpm \
+  -s dir \
+  -t deb \
+  -n voicechanger \
+  -v "$VERSION" \
+  -a "$DEB_ARCH" \
+  --description "Real-time voice changer for Raspberry Pi using Pedalboard" \
+  --url "https://github.com/zac/voicechanger" \
+  --license "MIT" \
+  --depends "python3 (>= 3.11)" \
+  --depends "python3-venv" \
+  --depends "libsndfile1" \
+  --depends "libasound2" \
+  --after-install "$PROJECT_ROOT/scripts/release/post-install.sh" \
+  --before-remove "$PROJECT_ROOT/scripts/release/pre-remove.sh" \
+  --package "$DIST/voicechanger_${VERSION}_${DEB_ARCH}.deb" \
+  -C "$STAGE" \
+  .
 
 echo ""
-echo "✅ Build complete. Artifacts:"
-ls -lh "$INSTALL_DIR"/*.{whl,deb} 2>/dev/null || echo "  (wheel and/or deb not found)"
+echo "✅ .deb built:"
+ls -lh "$DIST"/*.deb

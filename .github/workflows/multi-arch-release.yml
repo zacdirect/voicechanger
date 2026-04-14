@@ -63,9 +63,16 @@ jobs:
       - name: Collect release assets
         run: |
           mkdir -p release-assets/
-          find artifacts -type f \( -name '*.whl' -o -name '*.deb' \) -exec cp {} release-assets/ \;
+          # De-duplicate the voicechanger wheel (same py3-none-any from every arch)
+          find artifacts -name 'voicechanger-*.whl' | head -1 | xargs -I{} cp {} release-assets/
+          # Per-arch pedalboard wheels
+          find artifacts -name 'pedalboard-*.whl' -exec cp {} release-assets/ \;
+          # Per-arch .deb packages
+          find artifacts -name '*.deb' -exec cp {} release-assets/ \;
+          # Patch for anyone building from source
           cp native/patches/0001-add-LivePitchShift.patch release-assets/
           (cd release-assets && sha256sum * > SHA256SUMS)
+          echo "Release assets:"
           ls -lh release-assets/
 
       - name: Create GitHub Release
@@ -76,16 +83,26 @@ jobs:
           generate_release_notes: true
           files: release-assets/*
           body: |
+            ## Artifacts
+
+            | File | Description |
+            |------|-------------|
+            | `voicechanger-*.whl` | Pure-Python wheel (all platforms) |
+            | `pedalboard-*_x86_64.whl` | Patched pedalboard with LivePitchShift (x86_64) |
+            | `pedalboard-*_aarch64.whl` | Patched pedalboard with LivePitchShift (aarch64 / Pi 4+) |
+            | `pedalboard-*_armv7l.whl` | Patched pedalboard with LivePitchShift (armv7l / Pi 3) |
+            | `voicechanger_*_<arch>.deb` | All-in-one Debian package (Pi or Ubuntu) |
+
             ## Installation
 
-            ### Via pip:
+            ### Raspberry Pi / Debian (recommended):
             \`\`\`bash
-            pip install voicechanger-*.whl
+            sudo dpkg -i voicechanger_*_arm64.deb
             \`\`\`
 
-            ### Via deb (Debian/Ubuntu/Raspberry Pi OS):
+            ### Via pip (any Linux):
             \`\`\`bash
-            sudo dpkg -i voicechanger_*.deb
+            pip install voicechanger-*.whl pedalboard-*$(uname -m)*.whl
             \`\`\`
 
             ### Verification

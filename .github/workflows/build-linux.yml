@@ -6,10 +6,12 @@ on:
       arch:
         required: true
         type: string
+        description: "Target architecture: x86_64, aarch64, or armv7l"
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    # Native arm64 runner for aarch64, x86_64 runner for the rest (armv7l cross-compiles via QEMU)
+    runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -20,27 +22,33 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      # Only needed for armv7l (cross-compiled on x86_64 via QEMU)
+      - name: Set up QEMU for cross-compilation
+        if: inputs.arch == 'armv7l'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm/v7
+
+      - name: Install host tools
         run: |
           python -m pip install --upgrade pip
-          pip install build pytest
+          pip install build
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev rubygems build-essential
+          sudo gem install fpm
 
-      - name: Verify pedalboard patch exists
+      # ── voicechanger wheel (pure Python, arch-independent) ──
+      - name: Build voicechanger wheel
         run: |
-          test -f native/patches/0001-add-LivePitchShift.patch
-          echo "Pedalboard patch present"
+          python -m build --wheel --outdir dist/
+          ls -lh dist/
 
-      - name: Build wheel
-        run: |
-          python -m build --wheel --outdir dist
-          ls -lah dist
-
-      - name: Verify CLI entry points in built wheel
+      - name: Verify CLI entry points
         run: |
           python - <<'PY'
           import zipfile
           from pathlib import Path
-          wheel = next(Path('dist').glob('*.whl'))
+          wheel = next(Path('dist').glob('voicechanger-*.whl'))
           with zipfile.ZipFile(wheel) as zf:
               ep = [n for n in zf.namelist() if n.endswith('entry_points.txt')]
               if not ep:
@@ -51,20 +59,57 @@ jobs:
           print('entry points verified')
           PY
 
-      - name: Upload wheel artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: wheel-${{ inputs.arch }}
-          path: dist/*.whl
+      # ── Patched pedalboard wheel (native, per-architecture) ──
+      - name: Apply LivePitchShift patch to pedalboard
+        run: |
+          cd vendor/pedalboard
+          git apply ../../native/patches/0001-add-LivePitchShift.patch
+          echo "Patch applied successfully"
 
-      - name: Build deb artifact (best effort)
+      # x86_64 and aarch64: build natively on the runner
+      - name: Build patched pedalboard wheel (native)
+        if: inputs.arch != 'armv7l'
+        run: |
+          sudo apt-get install -y libsndfile1-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxrender-dev libxcomposite-dev \
+            libxcursor-dev libfreetype-dev libasound2-dev
+          cd vendor/pedalboard
+          pip install scikit-build-core pybind11
+          pip wheel . --no-deps --wheel-dir ../../dist/
+          echo "Pedalboard wheel built:"
+          ls -lh ../../dist/pedalboard-*.whl
+
+      # armv7l: cross-compile via QEMU + manylinux Docker container
+      - name: Build patched pedalboard wheel (armv7l cross-compile)
+        if: inputs.arch == 'armv7l'
+        run: |
+          docker run --rm --platform linux/arm/v7 \
+            -v "$PWD/vendor/pedalboard:/src" \
+            -v "$PWD/dist:/out" \
+            -w /src \
+            quay.io/pypa/manylinux2014_armv7l:latest \
+            bash -c '
+              set -e
+              yum install -y libsndfile libX11-devel libXrandr-devel \
+                libXinerama-devel libXrender-devel libXcomposite-devel \
+                libXcursor-devel freetype-devel alsa-lib-devel 2>/dev/null || true
+              /opt/python/cp311-cp311/bin/pip install scikit-build-core pybind11
+              /opt/python/cp311-cp311/bin/pip wheel . --no-deps --wheel-dir /tmp/wheels
+              cp /tmp/wheels/pedalboard-*.whl /out/
+            '
+          echo "Pedalboard wheel built:"
+          ls -lh dist/pedalboard-*.whl
+
+      # ── Debian package (bundles both wheels + systemd service) ──
+      - name: Build .deb package
         run: |
           chmod +x scripts/release/build-deb.sh
-          scripts/release/build-deb.sh "${{ inputs.arch }}" dist || true
+          scripts/release/build-deb.sh "${{ inputs.arch }}"
 
-      - name: Upload deb artifact if present
+      - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: deb-${{ inputs.arch }}
-          path: dist/*.deb
-          if-no-files-found: ignore
+          name: release-${{ inputs.arch }}
+          path: |
+            dist/*.whl
+            dist/*.deb

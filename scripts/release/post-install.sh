@@ -1,49 +1,47 @@
 #!/bin/bash
 # Post-installation script for voicechanger Debian package
-# Called after package is installed
+# Called after package files are unpacked to the filesystem.
+#
+# Creates a virtualenv under /opt/voicechanger/venv and installs the
+# bundled wheels (voicechanger + patched pedalboard) so nothing is
+# compiled on the target device.
 
 set -e
 
+INSTALL_DIR=/opt/voicechanger
+
 echo "Configuring voicechanger..."
 
-# Create dedicated user and group if they don't exist
-if ! getent group audio > /dev/null; then
-    echo "Creating audio group..."
-    groupadd -r audio || true
-fi
-
+# ── System user / group ──
 if ! id -u voicechanger > /dev/null 2>&1; then
-    echo "Creating voicechanger user..."
     useradd -r -s /usr/sbin/nologin -M -c "Voice Changer service" voicechanger || true
 fi
-
-# Add voicechanger user to audio group
 usermod -aG audio voicechanger || true
 
-# Create config directory if it doesn't exist
-mkdir -p /etc/voicechanger
-mkdir -p /var/lib/voicechanger
-
-# Set permissions
+# ── Config & state directories ──
+mkdir -p /etc/voicechanger /var/lib/voicechanger
 chown -R voicechanger:audio /var/lib/voicechanger 2>/dev/null || true
-chmod 755 /etc/voicechanger
-chmod 755 /var/lib/voicechanger
 
-# Enable systemd service
+# ── Virtual environment + wheel install ──
+echo "Creating virtualenv and installing wheels..."
+python3 -m venv "$INSTALL_DIR/venv"
+"$INSTALL_DIR/venv/bin/pip" install --upgrade pip --quiet
+"$INSTALL_DIR/venv/bin/pip" install --no-index --find-links "$INSTALL_DIR/wheels" \
+    voicechanger pedalboard 2>/dev/null \
+  || "$INSTALL_DIR/venv/bin/pip" install --no-index --find-links "$INSTALL_DIR/wheels" \
+    voicechanger
+
+# ── Enable systemd service ──
 if command -v systemctl > /dev/null; then
-    echo "Enabling voicechanger service..."
     systemctl daemon-reload || true
     systemctl enable voicechanger.service 2>/dev/null || true
 fi
 
+echo ""
 echo "✅ Voicechanger installed successfully"
 echo ""
 echo "Next steps:"
-echo "  1. Configure audio device: voicechanger list-devices"
-echo "  2. Select input device:    voicechanger set-device input <device-id>"
-echo "  3. Start service:         sudo systemctl start voicechanger"
-echo ""
-echo "For GUI, run: voicechanger-gui"
-echo "For production (headless) mode: sudo voicechanger production-mode enable"
-
-exit 0
+echo "  1. List audio devices:  voicechanger list-devices"
+echo "  2. Select input device: voicechanger set-device input <device>"
+echo "  3. Start service:       sudo systemctl start voicechanger"
+echo "  4. GUI (desktop):       voicechanger-gui"
