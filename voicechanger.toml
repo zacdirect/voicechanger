@@ -21,3 +21,7 @@ log_format = "json"
 [gui]
 window_width = 800
 window_height = 600
+
+[hardware]
+builtin_dir = "hardware/builtin"
+user_dir = ""

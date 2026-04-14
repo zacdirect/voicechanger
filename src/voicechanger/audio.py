@@ -6,6 +6,8 @@ import enum
 import glob
 import logging
 import os
+import subprocess
+import sys
 import threading
 import warnings
 from typing import Any
@@ -13,6 +15,7 @@ from typing import Any
 import numpy as np
 
 from voicechanger.effects import validate_effect
+from voicechanger.hardware import HardwareHintRegistry
 from voicechanger.profile import Profile
 
 logger = logging.getLogger(__name__)
@@ -29,6 +32,128 @@ def _configure_alsa_plugin_env() -> None:
 
 
 _configure_alsa_plugin_env()
+
+# Channel count candidates to probe, in preference order.
+# JUCE calls abort() (not raise) when the requested count is unsupported,
+# so we probe each candidate in a subprocess to protect the main process.
+_OUT_CHANNEL_CANDIDATES: tuple[int, ...] = (2, 1, 6, 8)
+_IN_CHANNEL_CANDIDATES: tuple[int, ...] = (1, 2)
+_PROBE_TIMEOUT = 8  # seconds per subprocess probe
+
+# Cache: (in_device, out_device) -> (num_in, num_out)
+# Avoids re-probing on profile switches within the same service run.
+_channel_cache: dict[tuple[str | None, str | None], tuple[int, int]] = {}
+
+
+def _probe_stream(
+    input_device_name: str | None,
+    output_device_name: str | None,
+    sample_rate: int,
+    buffer_size: int,
+    num_input_channels: int,
+    num_output_channels: int,
+) -> bool:
+    """Return True if AudioStream opens successfully with the given parameters.
+
+    Runs in a subprocess so that a JUCE abort() on an unsupported channel
+    count doesn't kill the main process.
+    """
+    code = (
+        "from pedalboard.io import AudioStream; import pedalboard as pb; "
+        f"s = AudioStream("
+        f"input_device_name={input_device_name!r}, "
+        f"output_device_name={output_device_name!r}, "
+        f"plugins=pb.Pedalboard([]), "
+        f"sample_rate={sample_rate}, "
+        f"buffer_size={buffer_size}, "
+        f"num_input_channels={num_input_channels}, "
+        f"num_output_channels={num_output_channels}); "
+        "s.__exit__(None, None, None)"
+    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            timeout=_PROBE_TIMEOUT,
+            capture_output=True,
+            env=os.environ.copy(),
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _negotiate_channels(
+    input_device_name: str | None,
+    output_device_name: str | None,
+    sample_rate: int,
+    buffer_size: int,
+    registry: HardwareHintRegistry | None = None,
+) -> tuple[int, int]:
+    """Return (num_input_channels, num_output_channels) that work for this device pair.
+
+    Lookup order:
+      1. In-memory cache (avoids re-probing on profile switches within one run)
+      2. Hardware hint registry (builtin + user persistent hints)
+      3. Subprocess probe (safe against JUCE abort())
+         → on success, writes a user hint so the next run skips probing
+
+    Falls back to (1, 2) if probing is unavailable.
+    """
+    cache_key = (input_device_name, output_device_name)
+    if cache_key in _channel_cache:
+        return _channel_cache[cache_key]
+
+    # Consult the persistent hint registry before probing.
+    if registry is not None:
+        hint = registry.lookup(input_device_name, output_device_name)
+        if hint is not None:
+            _channel_cache[cache_key] = hint
+            return hint
+
+    logger.info(
+        "Probing channel counts for input=%r output=%r (first-time, results cached)",
+        input_device_name,
+        output_device_name,
+    )
+
+    num_out = 2  # universal default
+    for candidate in _OUT_CHANNEL_CANDIDATES:
+        if _probe_stream(
+            input_device_name, output_device_name,
+            sample_rate, buffer_size, 1, candidate,
+        ):
+            num_out = candidate
+            logger.info("Output channels negotiated: %d", num_out)
+            break
+    else:
+        logger.warning(
+            "No output channel count worked for %r; using %d",
+            output_device_name, num_out,
+        )
+
+    num_in = 1  # mono mic default
+    for candidate in _IN_CHANNEL_CANDIDATES:
+        if _probe_stream(
+            input_device_name, output_device_name,
+            sample_rate, buffer_size, candidate, num_out,
+        ):
+            num_in = candidate
+            logger.info("Input channels negotiated: %d", num_in)
+            break
+    else:
+        logger.warning(
+            "No input channel count worked for %r; using %d",
+            input_device_name, num_in,
+        )
+
+    result = (num_in, num_out)
+    _channel_cache[cache_key] = result
+
+    # Persist the discovery so subsequent runs skip probing entirely.
+    if registry is not None:
+        registry.write_user_hint(input_device_name, output_device_name, num_in, num_out)
+
+    return result
 
 
 class PipelineState(enum.Enum):
@@ -91,6 +216,7 @@ def _open_stream(
     input_device: str = "default",
     output_device: str = "default",
     plugins: list[Any] | None = None,
+    hint_registry: HardwareHintRegistry | None = None,
 ) -> Any:
     """Open an audio stream.
 
@@ -116,14 +242,18 @@ def _open_stream(
         out_name = str(AudioStream.default_output_device_name)
     chain = pb.Pedalboard(plugins or [])
 
+    num_in, num_out = _negotiate_channels(
+        in_name, out_name, sample_rate, buffer_size, hint_registry
+    )
+
     return AudioStream(
         input_device_name=in_name,
         output_device_name=out_name,
         plugins=chain,
         sample_rate=sample_rate,
         buffer_size=buffer_size,
-        num_input_channels=1,
-        num_output_channels=1,
+        num_input_channels=num_in,
+        num_output_channels=num_out,
     )
 
 
@@ -246,7 +376,8 @@ def _candidate_device_pairs(input_device: str, output_device: str) -> list[tuple
 class AudioPipeline:
     """Manages audio stream lifecycle and effect chain application."""
 
-    def __init__(self) -> None:
+    def __init__(self, hint_registry: HardwareHintRegistry | None = None) -> None:
+        self._hint_registry = hint_registry
         self._state = PipelineState.STOPPED
         self._stream: Any = None
         self._plugins: list[Any] = []
@@ -338,6 +469,7 @@ class AudioPipeline:
                     input_device=in_dev,
                     output_device=out_dev,
                     plugins=self._effective_plugins(),
+                    hint_registry=self._hint_registry,
                 )
                 if hasattr(self._stream, "__enter__"):
                     self._stream.__enter__()

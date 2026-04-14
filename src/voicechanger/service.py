@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from voicechanger.audio import AudioPipeline
-from voicechanger.config import Config, resolve_profile_dirs
+from voicechanger.config import Config, resolve_hardware_dirs, resolve_profile_dirs
+from voicechanger.hardware import HardwareHintRegistry
 from voicechanger.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,9 @@ class Service:
 
     def __init__(self, config: Config) -> None:
         self._config = config
-        self._pipeline = AudioPipeline()
+        builtin_hw, user_hw = resolve_hardware_dirs(config)
+        hint_registry = HardwareHintRegistry(builtin_dir=builtin_hw, user_dir=user_hw)
+        self._pipeline = AudioPipeline(hint_registry=hint_registry)
         _resolved = resolve_profile_dirs(config)
         self._registry = ProfileRegistry(
             builtin_dir=Path(_resolved.profiles.builtin_dir),

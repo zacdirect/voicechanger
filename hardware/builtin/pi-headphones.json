@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "match": ["bcm2835 Headphones", "bcm2835 headphones"],
+  "num_input_channels": 1,
+  "num_output_channels": 2,
+  "note": "Raspberry Pi on-board 3.5mm audio jack — stereo output"
+}

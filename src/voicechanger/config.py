@@ -49,11 +49,18 @@ class GuiConfig:
 
 
 @dataclass
+class HardwareConfig:
+    builtin_dir: str = "hardware/builtin"
+    user_dir: str = ""  # empty → ~/.config/voicechanger/hardware
+
+
+@dataclass
 class Config:
     audio: AudioConfig = field(default_factory=AudioConfig)
     profiles: ProfilesConfig = field(default_factory=ProfilesConfig)
     service: ServiceConfig = field(default_factory=ServiceConfig)
     gui: GuiConfig = field(default_factory=GuiConfig)
+    hardware: HardwareConfig = field(default_factory=HardwareConfig)
 
 
 def _safe_int(value: Any, default: int) -> int:
@@ -119,6 +126,13 @@ def load_config(path: Path) -> Config:
             window_height=_safe_int(gui.get("window_height"), 600),
         )
 
+    hardware = data.get("hardware", {})
+    if isinstance(hardware, dict):
+        config.hardware = HardwareConfig(
+            builtin_dir=_safe_str(hardware.get("builtin_dir"), "hardware/builtin"),
+            user_dir=_safe_str(hardware.get("user_dir"), ""),
+        )
+
     return config
 
 
@@ -131,6 +145,26 @@ def _resolve_dir(raw: str) -> str:
     if candidate.is_dir():
         return str(candidate)
     return raw
+
+
+def resolve_hardware_dirs(config: Config) -> tuple[Path, Path]:
+    """Return resolved (builtin_dir, user_dir) Path objects for hardware hints.
+
+    builtin_dir: resolved relative to the package root.
+    user_dir: XDG-based (~/.config/voicechanger/hardware) when not configured.
+    """
+    builtin_raw = config.hardware.builtin_dir or "hardware/builtin"
+    builtin = Path(builtin_raw)
+    if not builtin.is_absolute():
+        builtin = _PACKAGE_ROOT / builtin
+
+    user_raw = config.hardware.user_dir
+    if user_raw:
+        user = Path(user_raw).expanduser()
+    else:
+        user = Path.home() / ".config" / "voicechanger" / "hardware"
+
+    return builtin, user
 
 
 def resolve_profile_dirs(config: Config) -> Config:
@@ -177,6 +211,10 @@ def save_config(path: Path, config: Config) -> None:
         "[gui]",
         f"window_width = {int(config.gui.window_width)}",
         f"window_height = {int(config.gui.window_height)}",
+        "",
+        "[hardware]",
+        f"builtin_dir = \"{config.hardware.builtin_dir}\"",
+        f"user_dir = \"{config.hardware.user_dir}\"",
         "",
     ]
     path.write_text("\n".join(lines), encoding="utf-8")

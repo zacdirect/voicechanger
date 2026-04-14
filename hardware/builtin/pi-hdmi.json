@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "match": ["vc4-hdmi"],
+  "num_input_channels": 1,
+  "num_output_channels": 2,
+  "note": "Raspberry Pi HDMI audio — stereo output"
+}

@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "match": ["PipeWire Sound Server", "pipewire"],
+  "num_input_channels": 1,
+  "num_output_channels": 2,
+  "note": "PipeWire ALSA emulation requires stereo output; mono mic capture works fine"
+}

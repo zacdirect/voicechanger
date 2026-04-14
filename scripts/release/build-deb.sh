@@ -63,6 +63,9 @@ cp -a "$LIB" "$STAGE/opt/voicechanger/lib"
 # Built-in profiles
 cp -a "$PROJECT_ROOT/profiles" "$STAGE/opt/voicechanger/profiles"
 
+# Built-in hardware hints
+cp -a "$PROJECT_ROOT/hardware" "$STAGE/opt/voicechanger/hardware"
+
 # Systemd unit
 cp "$PROJECT_ROOT/deploy/voicechanger.service" "$STAGE/etc/systemd/system/"
 

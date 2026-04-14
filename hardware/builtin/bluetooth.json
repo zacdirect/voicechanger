@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "match": ["Bluetooth Audio", "bluetooth"],
+  "num_input_channels": 1,
+  "num_output_channels": 2,
+  "note": "Bluetooth HFP/HSP profiles: mono mic input, stereo output"
+}
