@@ -23,8 +23,7 @@ STAGE="$PROJECT_ROOT/dist/deb-staging"
 case "$ARCH" in
   x86_64)  DEB_ARCH="amd64" ;;
   aarch64) DEB_ARCH="arm64" ;;
-  armv7l)  DEB_ARCH="armhf" ;;
-  *)       echo "ERROR: unsupported arch: $ARCH" >&2; exit 1 ;;
+  *)       echo "ERROR: unsupported arch: $ARCH (supported: x86_64, aarch64)" >&2; exit 1 ;;
 esac
 
 # ── Verify wheels exist ──

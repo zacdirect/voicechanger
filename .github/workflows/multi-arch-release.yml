@@ -27,12 +27,12 @@ jobs:
       - name: Test
         run: pytest --tb=short -q
 
-  # Build for all three architectures using the reusable workflow
+  # Build for both architectures using the reusable workflow
   build:
     needs: quality
     strategy:
       matrix:
-        arch: [x86_64, aarch64, armv7l]
+        arch: [x86_64, aarch64]
     uses: ./.github/workflows/build-linux.yml
     with:
       arch: ${{ matrix.arch }}
@@ -89,8 +89,7 @@ jobs:
             |------|-------------|
             | `voicechanger-*.whl` | Pure-Python wheel (all platforms) |
             | `pedalboard-*_x86_64.whl` | Patched pedalboard with LivePitchShift (x86_64) |
-            | `pedalboard-*_aarch64.whl` | Patched pedalboard with LivePitchShift (aarch64 / Pi 4+) |
-            | `pedalboard-*_armv7l.whl` | Patched pedalboard with LivePitchShift (armv7l / Pi 3) |
+            | `pedalboard-*_aarch64.whl` | Patched pedalboard with LivePitchShift (aarch64 / Pi 3+) |
             | `voicechanger_*_<arch>.deb` | All-in-one Debian package (Pi or Ubuntu) |
 
             ## Installation

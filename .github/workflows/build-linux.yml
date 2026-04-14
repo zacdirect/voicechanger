@@ -6,11 +6,10 @@ on:
       arch:
         required: true
         type: string
-        description: "Target architecture: x86_64, aarch64, or armv7l"
+        description: "Target architecture: x86_64 or aarch64"
 
 jobs:
   build:
-    # Native arm64 runner for aarch64, x86_64 runner for the rest (armv7l cross-compiles via QEMU)
     runs-on: ${{ inputs.arch == 'aarch64' && 'ubuntu-22.04-arm' || 'ubuntu-22.04' }}
     steps:
       - uses: actions/checkout@v5
@@ -21,13 +20,6 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-
-      # Only needed for armv7l (cross-compiled on x86_64 via QEMU)
-      - name: Set up QEMU for cross-compilation
-        if: inputs.arch == 'armv7l'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: linux/arm/v7
 
       - name: Install host tools
         run: |
@@ -66,9 +58,7 @@ jobs:
           git apply ../../native/patches/0001-add-LivePitchShift.patch
           echo "Patch applied successfully"
 
-      # x86_64 and aarch64: build natively on the runner
-      - name: Build patched pedalboard wheel (native)
-        if: inputs.arch != 'armv7l'
+      - name: Build patched pedalboard wheel
         run: |
           sudo apt-get install -y libsndfile1-dev libx11-dev libxrandr-dev \
             libxinerama-dev libxrender-dev libxcomposite-dev \
@@ -78,27 +68,6 @@ jobs:
           pip wheel . --no-deps --wheel-dir ../../dist/
           echo "Pedalboard wheel built:"
           ls -lh ../../dist/pedalboard-*.whl
-
-      # armv7l: cross-compile via QEMU + manylinux Docker container
-      - name: Build patched pedalboard wheel (armv7l cross-compile)
-        if: inputs.arch == 'armv7l'
-        run: |
-          docker run --rm --platform linux/arm/v7 \
-            -v "$PWD/vendor/pedalboard:/src" \
-            -v "$PWD/dist:/out" \
-            -w /src \
-            quay.io/pypa/manylinux2014_armv7l:latest \
-            bash -c '
-              set -e
-              yum install -y libsndfile libX11-devel libXrandr-devel \
-                libXinerama-devel libXrender-devel libXcomposite-devel \
-                libXcursor-devel freetype-devel alsa-lib-devel 2>/dev/null || true
-              /opt/python/cp311-cp311/bin/pip install scikit-build-core pybind11
-              /opt/python/cp311-cp311/bin/pip wheel . --no-deps --wheel-dir /tmp/wheels
-              cp /tmp/wheels/pedalboard-*.whl /out/
-            '
-          echo "Pedalboard wheel built:"
-          ls -lh dist/pedalboard-*.whl
 
       # ── Debian package (bundles both wheels + systemd service) ──
       - name: Build .deb package
