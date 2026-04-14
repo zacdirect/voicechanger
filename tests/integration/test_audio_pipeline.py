@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from tests.fake_stream import fake_open_stream
 from voicechanger.audio import AudioPipeline, PipelineState
 from voicechanger.profile import Profile
 
 
 class TestPipelineLifecycle:
-    """Test full pipeline lifecycle with mock AudioStream."""
+    """Test full pipeline lifecycle with FakeAudioStream."""
 
-    @patch("voicechanger.audio._open_stream")
-    def test_full_lifecycle(self, mock_open: MagicMock) -> None:
-        """Test start → apply profile → switch profile → stop."""
-        mock_stream = MagicMock()
-        mock_open.return_value = mock_stream
-
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
+    def test_full_lifecycle(self, _mock_open: object) -> None:
+        """Test start -> apply profile -> switch profile -> stop."""
         pipeline = AudioPipeline()
         assert pipeline.state == PipelineState.STOPPED
 
@@ -48,11 +46,8 @@ class TestPipelineLifecycle:
         pipeline.stop()
         assert pipeline.state == PipelineState.STOPPED
 
-    @patch("voicechanger.audio._open_stream")
-    def test_start_stop_multiple_times(self, mock_open: MagicMock) -> None:
-        mock_stream = MagicMock()
-        mock_open.return_value = mock_stream
-
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
+    def test_start_stop_multiple_times(self, _mock_open: object) -> None:
         pipeline = AudioPipeline()
         profile = Profile(name="clean", effects=[])
 
@@ -62,12 +57,9 @@ class TestPipelineLifecycle:
             pipeline.stop()
             assert pipeline.state == PipelineState.STOPPED
 
-    @patch("voicechanger.audio._open_stream")
-    def test_degraded_recovery(self, mock_open: MagicMock) -> None:
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
+    def test_degraded_recovery(self, _mock_open: object) -> None:
         """Start with bad profile (degrades), then switch to good profile (recovers)."""
-        mock_stream = MagicMock()
-        mock_open.return_value = mock_stream
-
         pipeline = AudioPipeline()
         bad = Profile(
             name="bad-only",

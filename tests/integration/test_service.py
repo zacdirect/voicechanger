@@ -7,10 +7,11 @@ import threading
 import time
 from collections.abc import Generator
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from tests.fake_stream import fake_open_stream
 from voicechanger.cli import main
 from voicechanger.config import AudioConfig, Config, ProfilesConfig, ServiceConfig
 from voicechanger.service import Service
@@ -34,8 +35,7 @@ def running_service(
 
     service = Service(config)
 
-    with patch("voicechanger.audio._open_stream") as mock_open:
-        mock_open.return_value = MagicMock()
+    with patch("voicechanger.audio._open_stream", side_effect=fake_open_stream):
         thread = threading.Thread(target=service.run, daemon=True)
         thread.start()
 

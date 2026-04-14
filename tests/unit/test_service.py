@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from tests.fake_stream import fake_open_stream
 from voicechanger.config import AudioConfig, Config, ProfilesConfig, ServiceConfig
 from voicechanger.service import Service
 
@@ -28,17 +29,15 @@ def _make_service(
 class TestCmdSetMonitor:
     """Test _cmd_set_monitor handler."""
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_monitor_enabled(
         self,
-        mock_open: MagicMock,
+        _mock_open: object,
         builtin_profiles: Path,
         tmp_profiles: dict[str, Path],
         tmp_path: Path,
     ) -> None:
-        mock_open.return_value = MagicMock()
         service = _make_service(builtin_profiles, tmp_profiles, tmp_path)
-        # Simulate started pipeline
         from voicechanger.profile import Profile
 
         service._pipeline.start(Profile(name="clean", effects=[]))
@@ -47,15 +46,14 @@ class TestCmdSetMonitor:
         assert result["ok"] is True
         assert result["data"]["monitor_enabled"] is True
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_monitor_disabled(
         self,
-        mock_open: MagicMock,
+        _mock_open: object,
         builtin_profiles: Path,
         tmp_profiles: dict[str, Path],
         tmp_path: Path,
     ) -> None:
-        mock_open.return_value = MagicMock()
         service = _make_service(builtin_profiles, tmp_profiles, tmp_path)
         from voicechanger.profile import Profile
 
@@ -91,15 +89,14 @@ class TestCmdSetMonitor:
 class TestGetStatusWithMonitor:
     """Test that get_status includes monitor_enabled field."""
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_status_includes_monitor_enabled(
         self,
-        mock_open: MagicMock,
+        _mock_open: object,
         builtin_profiles: Path,
         tmp_profiles: dict[str, Path],
         tmp_path: Path,
     ) -> None:
-        mock_open.return_value = MagicMock()
         service = _make_service(builtin_profiles, tmp_profiles, tmp_path)
         from voicechanger.profile import Profile
 
@@ -114,15 +111,14 @@ class TestGetStatusWithMonitor:
 class TestCmdSetDevice:
     """Test _cmd_set_device handler."""
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_both_devices(
         self,
-        mock_open: MagicMock,
+        _mock_open: object,
         builtin_profiles: Path,
         tmp_profiles: dict[str, Path],
         tmp_path: Path,
     ) -> None:
-        mock_open.return_value = MagicMock()
         service = _make_service(builtin_profiles, tmp_profiles, tmp_path)
         from voicechanger.profile import Profile
 
@@ -136,15 +132,14 @@ class TestCmdSetDevice:
         assert result["data"]["output_device"] == "hw:2,0"
         assert result["data"]["restarted"] is True
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_only_input(
         self,
-        mock_open: MagicMock,
+        _mock_open: object,
         builtin_profiles: Path,
         tmp_profiles: dict[str, Path],
         tmp_path: Path,
     ) -> None:
-        mock_open.return_value = MagicMock()
         service = _make_service(builtin_profiles, tmp_profiles, tmp_path)
         from voicechanger.profile import Profile
 

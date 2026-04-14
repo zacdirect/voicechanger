@@ -9,10 +9,11 @@ import time
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from tests.fake_stream import fake_open_stream
 from voicechanger.config import AudioConfig, Config, ProfilesConfig, ServiceConfig
 from voicechanger.service import Service
 
@@ -69,11 +70,10 @@ def _send_ipc(
 class TestIPCProtocol:
     """Test the IPC command interface."""
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_switch_profile(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         # Run service in background thread
@@ -90,11 +90,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_list_profiles(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -112,11 +111,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_get_profile(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -132,11 +130,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_get_status(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -153,11 +150,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_reload_profiles(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -172,11 +168,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_monitor(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -195,11 +190,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_monitor_missing_param(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -214,11 +208,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_device(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -238,11 +231,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_set_device_missing_params(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -257,11 +249,10 @@ class TestIPCProtocol:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_shutdown(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -282,11 +273,10 @@ class TestIPCProtocol:
 class TestIPCErrors:
     """Test error handling in IPC protocol."""
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_invalid_command(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -301,11 +291,10 @@ class TestIPCErrors:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_profile_not_found(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
@@ -320,12 +309,11 @@ class TestIPCErrors:
             service._shutdown_event.set()
             thread.join(timeout=3)
 
-    @patch("voicechanger.audio._open_stream")
+    @patch("voicechanger.audio._open_stream", side_effect=fake_open_stream)
     def test_json_framing(
-        self, mock_open: MagicMock, service_setup: tuple[Service, str]
+        self, _mock_open: object, service_setup: tuple[Service, str]
     ) -> None:
         """Verify JSON-over-newline framing works correctly."""
-        mock_open.return_value = MagicMock()
         service, socket_path = service_setup
 
         thread = threading.Thread(target=service.run, daemon=True)
