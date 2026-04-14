@@ -10,6 +10,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Root directory for resolving relative paths (profiles, etc.).
+# Works for both installed (/opt/voicechanger/lib/voicechanger/config.py → /opt/voicechanger)
+# and development (src/voicechanger/config.py → project root).
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 @dataclass
 class AudioConfig:
@@ -114,6 +119,24 @@ def load_config(path: Path) -> Config:
             window_height=_safe_int(gui.get("window_height"), 600),
         )
 
+    return config
+
+
+def _resolve_dir(raw: str) -> str:
+    """Resolve a relative directory against the package root."""
+    p = Path(raw)
+    if p.is_absolute():
+        return raw
+    candidate = _PACKAGE_ROOT / p
+    if candidate.is_dir():
+        return str(candidate)
+    return raw
+
+
+def resolve_profile_dirs(config: Config) -> Config:
+    """Resolve relative profile directories against the package root."""
+    config.profiles.builtin_dir = _resolve_dir(config.profiles.builtin_dir)
+    config.profiles.user_dir = _resolve_dir(config.profiles.user_dir)
     return config
 
 

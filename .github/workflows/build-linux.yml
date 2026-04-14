@@ -82,7 +82,14 @@ jobs:
           echo "All wheels in dist/:"
           ls -lh dist/*.whl
 
-      # ── Debian package (bundles all wheels + systemd service) ──
+      # ── Pre-install all packages into a lib directory for the .deb ──
+      - name: Install packages into lib tree
+        run: |
+          pip install --target dist/lib --find-links dist/ --no-deps dist/*.whl
+          echo "Installed packages:"
+          ls dist/lib/
+
+      # ── Debian package (bundles pre-installed lib + systemd service) ──
       - name: Build .deb package
         run: |
           chmod +x scripts/release/build-deb.sh

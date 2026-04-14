@@ -1,10 +1,12 @@
 #!/bin/bash
 # Build Debian package for voicechanger.
 #
-# Bundles the voicechanger wheel, the patched pedalboard wheel, the systemd
-# service unit, and post-install / pre-remove scripts into a single .deb.
+# Bundles pre-installed Python packages, the systemd service unit,
+# and post-install / pre-remove scripts into a single .deb.
+# No pip or venv is needed on the target system.
 #
-# Prerequisites: fpm (installed by the CI workflow), wheels already in dist/.
+# Prerequisites: fpm (installed by the CI workflow),
+#                dist/lib/ populated by `pip install --target`.
 #
 # Usage:
 #   ./build-deb.sh <arch> <python-version>
@@ -19,6 +21,7 @@ PYVER="${2:?Usage: build-deb.sh <arch> <python-version>}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DIST="$PROJECT_ROOT/dist"
 STAGE="$PROJECT_ROOT/dist/deb-staging"
+LIB="$DIST/lib"
 
 # Short Python tag for filenames (e.g. "3.12" -> "py312")
 PYTAG="py${PYVER//./}"
@@ -30,52 +33,53 @@ case "$ARCH" in
   *)       echo "ERROR: unsupported arch: $ARCH (supported: x86_64, aarch64)" >&2; exit 1 ;;
 esac
 
-# ── Verify wheels exist ──
-VC_WHEEL=$(find "$DIST" -maxdepth 1 -name 'voicechanger-*.whl' | head -1)
-PB_WHEEL=$(find "$DIST" -maxdepth 1 -name 'pedalboard-*.whl' | head -1)
-
-if [[ -z "$VC_WHEEL" ]]; then
-  echo "ERROR: voicechanger wheel not found in $DIST" >&2; exit 1
+# ── Verify pre-installed lib exists ──
+if [[ ! -d "$LIB" ]]; then
+  echo "ERROR: pre-installed lib directory not found at $LIB" >&2; exit 1
 fi
-if [[ -z "$PB_WHEEL" ]]; then
-  echo "WARNING: pedalboard wheel not found — .deb will not include it" >&2
+if [[ ! -d "$LIB/voicechanger" ]]; then
+  echo "ERROR: voicechanger package not found in $LIB" >&2; exit 1
 fi
 
-VERSION=$(echo "$(basename "$VC_WHEEL")" | cut -d'-' -f2)
+# Extract version from the installed package metadata
+VERSION=$(python3 -c "
+from pathlib import Path
+for d in Path('$LIB').glob('voicechanger-*.dist-info'):
+    for line in (d / 'METADATA').read_text().splitlines():
+        if line.startswith('Version:'):
+            print(line.split(': ',1)[1]); break
+")
 echo "Building .deb  arch=$DEB_ARCH  version=$VERSION  python=$PYVER"
 
 # ── Stage files ──
 rm -rf "$STAGE"
-mkdir -p "$STAGE/opt/voicechanger/wheels"
+mkdir -p "$STAGE/opt/voicechanger"
 mkdir -p "$STAGE/etc/systemd/system"
 mkdir -p "$STAGE/usr/local/bin"
 
-# Bundle ALL wheels (voicechanger + pedalboard + transitive deps like numpy, flet, sounddevice)
-cp "$DIST"/*.whl "$STAGE/opt/voicechanger/wheels/"
+# Pre-installed Python packages (the entire lib tree)
+cp -a "$LIB" "$STAGE/opt/voicechanger/lib"
+
+# Built-in profiles
+cp -a "$PROJECT_ROOT/profiles" "$STAGE/opt/voicechanger/profiles"
 
 # Systemd unit
 cp "$PROJECT_ROOT/deploy/voicechanger.service" "$STAGE/etc/systemd/system/"
 
-# Wrapper scripts (installed to PATH)
-cat > "$STAGE/usr/local/bin/voicechanger" <<'WRAPPER'
+# Wrapper scripts — use PYTHONPATH, no venv needed
+cat > "$STAGE/usr/local/bin/voicechanger" <<WRAPPER
 #!/bin/bash
-exec /opt/voicechanger/venv/bin/python -m voicechanger "$@"
+export PYTHONPATH=/opt/voicechanger/lib
+exec python${PYVER} -m voicechanger "\$@"
 WRAPPER
 chmod 755 "$STAGE/usr/local/bin/voicechanger"
 
-cat > "$STAGE/usr/local/bin/voicechanger-gui" <<'WRAPPER'
+cat > "$STAGE/usr/local/bin/voicechanger-gui" <<WRAPPER
 #!/bin/bash
-exec /opt/voicechanger/venv/bin/python -m voicechanger gui "$@"
+export PYTHONPATH=/opt/voicechanger/lib
+exec python${PYVER} -m voicechanger gui "\$@"
 WRAPPER
 chmod 755 "$STAGE/usr/local/bin/voicechanger-gui"
-
-# ── Generate post-install that pins the Python version ──
-# Prepend the VOICECHANGER_PYTHON export, then inline the real
-# post-install.sh so fpm embeds a fully self-contained script.
-POST_INSTALL_WRAPPER="$STAGE/post-install-wrapper.sh"
-printf '#!/bin/bash\nexport VOICECHANGER_PYTHON=python%s\n' "$PYVER" > "$POST_INSTALL_WRAPPER"
-cat "$PROJECT_ROOT/scripts/release/post-install.sh" >> "$POST_INSTALL_WRAPPER"
-chmod 755 "$POST_INSTALL_WRAPPER"
 
 # ── Build .deb with fpm ──
 fpm \
@@ -88,12 +92,13 @@ fpm \
   --url "https://github.com/zac/voicechanger" \
   --license "MIT" \
   --depends "python${PYVER}" \
-  --depends "python${PYVER}-venv" \
   --depends "libsndfile1" \
   --depends "libasound2" \
+  --depends "pipewire-alsa" \
   --conflicts "voicechanger-py312" \
+  --conflicts "voicechanger-py313" \
   --conflicts "voicechanger-py314" \
-  --after-install "$POST_INSTALL_WRAPPER" \
+  --after-install "$PROJECT_ROOT/scripts/release/post-install.sh" \
   --before-remove "$PROJECT_ROOT/scripts/release/pre-remove.sh" \
   --package "$DIST/voicechanger_${VERSION}_${PYTAG}_${DEB_ARCH}.deb" \
   -C "$STAGE" \

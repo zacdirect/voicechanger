@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any, NoReturn
 
-from voicechanger.config import Config, load_config, save_config
+from voicechanger.config import Config, load_config, resolve_profile_dirs, save_config
 from voicechanger.effects import EffectValidationError, validate_effect
 from voicechanger.profile import Profile, ProfileValidationError
 from voicechanger.registry import ProfileRegistry
@@ -169,6 +169,7 @@ def _send_ipc_command(
 
 def _get_registry(config: Config) -> ProfileRegistry:
     """Create a ProfileRegistry from config."""
+    resolve_profile_dirs(config)
     return ProfileRegistry(
         builtin_dir=Path(config.profiles.builtin_dir),
         user_dir=Path(config.profiles.user_dir),
@@ -380,29 +381,37 @@ def _cmd_device_list(args: argparse.Namespace) -> int:
     from voicechanger.device import DeviceMonitor
 
     monitor = DeviceMonitor()
-    inputs = monitor.list_input_devices()
-    outputs = monitor.list_output_devices()
+
+    # Use pedalboard/JUCE stream names — these are what the audio engine
+    # actually sees, including PipeWire and Bluetooth devices.
+    stream_inputs = monitor._stream_names(is_input=True)
+    stream_outputs = monitor._stream_names(is_input=False)
+    default_in = monitor._default_stream_name(is_input=True)
+    default_out = monitor._default_stream_name(is_input=False)
 
     if getattr(args, "json", False):
-        print(json.dumps({"input_devices": inputs, "output_devices": outputs}, indent=2))
+        print(json.dumps({
+            "input_devices": stream_inputs,
+            "output_devices": stream_outputs,
+            "default_input": default_in,
+            "default_output": default_out,
+        }, indent=2))
     else:
         print("INPUT DEVICES:")
-        if inputs:
-            for d in inputs:
-                print(f"  card {d['card']}: {d['name']} [{d['card_description']}], "
-                      f"device {d['device']}: {d['device_name']} [{d['device_description']}]")
+        if stream_inputs:
+            for name in stream_inputs:
+                marker = " (default)" if name == default_in else ""
+                print(f"  {name}{marker}")
         else:
             print("  (none detected)")
-        print("  * default")
         print()
         print("OUTPUT DEVICES:")
-        if outputs:
-            for d in outputs:
-                print(f"  card {d['card']}: {d['name']} [{d['card_description']}], "
-                      f"device {d['device']}: {d['device_name']} [{d['device_description']}]")
+        if stream_outputs:
+            for name in stream_outputs:
+                marker = " (default)" if name == default_out else ""
+                print(f"  {name}{marker}")
         else:
             print("  (none detected)")
-        print("  * default")
 
     return 0
 

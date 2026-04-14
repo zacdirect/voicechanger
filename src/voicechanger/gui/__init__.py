@@ -242,7 +242,18 @@ def launch_gui() -> None:
         logger.debug("Signal handlers unavailable in current thread")
 
     try:
-        ft.app(target=_start)
+        # Raspberry Pi's VideoCore GPU lacks Vulkan support for Flutter's
+        # Impeller renderer, so fall back to the browser-based UI.
+        _is_pi = False
+        try:
+            _is_pi = "Raspberry Pi" in open("/proc/device-tree/model").read()
+        except OSError:
+            pass
+        if _is_pi:
+            logger.info("Raspberry Pi detected — launching GUI in web browser")
+            ft.app(target=_start, view=ft.AppView.WEB_BROWSER)
+        else:
+            ft.app(target=_start)
     finally:
         _kill_proc()
         if app_ref is not None:

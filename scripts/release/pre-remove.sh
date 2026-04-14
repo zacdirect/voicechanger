@@ -1,6 +1,5 @@
 #!/bin/bash
 # Pre-removal script for voicechanger Debian package
-# Called before package is removed
 
 set -e
 
@@ -15,6 +14,7 @@ fi
 
 # Clean up runtime files
 rm -f /run/voicechanger/*.sock 2>/dev/null || true
+rm -rf /opt/voicechanger 2>/dev/null || true
 
 echo "✅ Voicechanger removed"
 

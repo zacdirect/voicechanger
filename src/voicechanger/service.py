@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from voicechanger.audio import AudioPipeline
-from voicechanger.config import Config
+from voicechanger.config import Config, resolve_profile_dirs
 from voicechanger.registry import ProfileRegistry
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ class Service:
     def __init__(self, config: Config) -> None:
         self._config = config
         self._pipeline = AudioPipeline()
+        resolve_profile_dirs(config)
         self._registry = ProfileRegistry(
             builtin_dir=Path(config.profiles.builtin_dir),
             user_dir=Path(config.profiles.user_dir),
