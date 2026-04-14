@@ -11,12 +11,12 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -27,7 +27,7 @@ jobs:
 
       - name: Verify pedalboard patch exists
         run: |
-          test -f native/patches/pedalboard.patch
+          test -f native/patches/0001-add-LivePitchShift.patch
           echo "Pedalboard patch present"
 
       - name: Build wheel
@@ -52,7 +52,7 @@ jobs:
           PY
 
       - name: Upload wheel artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheel-${{ inputs.arch }}
           path: dist/*.whl
@@ -63,7 +63,7 @@ jobs:
           scripts/release/build-deb.sh "${{ inputs.arch }}" dist || true
 
       - name: Upload deb artifact if present
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: deb-${{ inputs.arch }}
           path: dist/*.deb

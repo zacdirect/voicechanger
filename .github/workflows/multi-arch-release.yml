@@ -8,163 +8,104 @@ on:
 
 env:
   PYTHON_VERSION: "3.11"
-  PEDALBOARD_PATCH: "native/patches/0001-add-LivePitchShift.patch"
 
 jobs:
-  # Build for all three architectures
-  build-matrix:
+  quality:
     runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        include:
-          - arch: x86_64
-            runs-on: ubuntu-22.04
-            dockerfile: Dockerfile.x86_64
-          - arch: aarch64
-            runs-on: ubuntu-22.04
-            dockerfile: Dockerfile.aarch64
-          - arch: armv7l
-            runs-on: ubuntu-22.04
-            dockerfile: Dockerfile.armv7l
-    
-    name: Build for ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
+      - uses: actions/checkout@v5
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel build
-          pip install -r requirements-dev.txt 2>/dev/null || pip install pytest ruff
+          python -m pip install --upgrade pip
+          pip install .[dev]
+      - name: Lint
+        run: ruff check src tests
+      - name: Test
+        run: pytest --tb=short -q
 
-      - name: Verify pedalboard patch
-        run: |
-          if [ ! -f "${{ env.PEDALBOARD_PATCH }}" ]; then
-            echo "ERROR: Pedalboard patch file not found: ${{ env.PEDALBOARD_PATCH }}"
-            exit 1
-          fi
-          echo "✓ Pedalboard patch found"
-
-      - name: Build wheel for ${{ matrix.arch }}
-        run: |
-          python -m build --wheel --outdir dist/
-          ls -lh dist/*.whl
-
-      - name: Verify entry points
-        run: |
-          python -c "
-          import zipfile
-          import re
-          wheel_file = [f for f in __import__('pathlib').Path('dist').glob('*.whl')][0]
-          with zipfile.ZipFile(wheel_file) as z:
-              for name in z.namelist():
-                  if 'entry_points' in name:
-                      content = z.read(name).decode()
-                      if 'voicechanger' not in content:
-                          raise SystemExit('voicechanger entry point missing!')
-                      if 'voicechanger-gui' not in content:
-                          raise SystemExit('voicechanger-gui entry point missing!')
-          print('✓ Entry points verified')
-          "
-
-      - name: Run basic tests
-        run: |
-          pytest tests/unit/test_cli.py -v --tb=short|| true
-          pytest tests/contract/test_cli.py -v --tb=short || true
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v3
-        with:
-          name: wheels-${{ matrix.arch }}
-          path: dist/*.whl
+  # Build for all three architectures using the reusable workflow
+  build:
+    needs: quality
+    strategy:
+      matrix:
+        arch: [x86_64, aarch64, armv7l]
+    uses: ./.github/workflows/build-linux.yml
+    with:
+      arch: ${{ matrix.arch }}
 
   # Publish release
   publish-release:
-    needs: build-matrix
+    needs: build
     runs-on: ubuntu-22.04
     if: success()
-    
+    permissions:
+      contents: write
+
     steps:
-      - uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v5
+
       - name: Set up Python for version bump
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Download all wheels
-        uses: actions/download-artifact@v3
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
         with:
-          path: dist-all/
+          path: artifacts/
 
-      - name: Collect artifacts
+      - name: Collect release assets
         run: |
-          mkdir -p dist/
-          find dist-all -name "*.whl" -exec cp {} dist/ \;
-          ls -lh dist/
+          mkdir -p release-assets/
+          find artifacts -type f \( -name '*.whl' -o -name '*.deb' \) -exec cp {} release-assets/ \;
+          cp native/patches/0001-add-LivePitchShift.patch release-assets/
+          (cd release-assets && sha256sum * > SHA256SUMS)
+          ls -lh release-assets/
 
       - name: Bump version
         run: |
           python scripts/release/version-bump.py --bump patch
-        
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ github.sha }}
-          files: dist/*.whl
+          files: release-assets/*
           body: |
             # Voicechanger Release
-            
-            Multi-architecture release including wheels for:
-            - x86_64 (Ubuntu/Debian Linux)
-            - aarch64 (Raspberry Pi OS 64-bit)
-            - armv7l (Raspberry Pi OS 32-bit)
-            
+
+            Multi-architecture release including:
+            - Wheels for x86_64, aarch64, armv7l
+            - Debian packages (when available)
+            - Pedalboard patch (`0001-add-LivePitchShift.patch`)
+            - SHA256 checksums
+
             ## Installation
-            
+
             ### Via pip:
             \`\`\`bash
-            pip install voicechanger-0.1.0-py3-none-any.whl
+            pip install voicechanger-*.whl
             \`\`\`
-            
-            ### Via CLI after installation:
+
+            ### Via deb (Debian/Ubuntu/Raspberry Pi OS):
+            \`\`\`bash
+            sudo dpkg -i voicechanger_*.deb
+            \`\`\`
+
+            ### CLI after installation:
             \`\`\`bash
             voicechanger list-devices
             voicechanger set-device input <device-id>
             voicechanger gui
             \`\`\`
-            
+
             ## Verification
-            
-            SHA256 checksums are provided below for artifact verification.
+            \`\`\`bash
+            sha256sum -c SHA256SUMS
+            \`\`\`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Generate checksums
-  checksums:
-    needs: publish-release
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Download all wheels
-        uses: actions/download-artifact@v3
-        with:
-          path: dist-all/
-
-      - name: Generate checksums
-        run: |
-          mkdir -p checksums/
-          find dist-all -name "*.whl" -exec sha256sum {} \; | tee checksums/SHA256SUMS
-          cat checksums/SHA256SUMS
-
-      - name: Upload checksums
-        uses: actions/upload-artifact@v3
-        with:
-          name: checksums
-          path: checksums/SHA256SUMS

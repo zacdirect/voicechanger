@@ -139,13 +139,13 @@ class TestCLIDeviceAliases:
         """Verify list-devices and device list produce same output."""
         result1 = run_cli("list-devices", "--json")
         result2 = run_cli("device", "list", "--json")
-        
+
         assert result1.returncode == 0
         assert result2.returncode == 0
-        
+
         data1 = json.loads(result1.stdout)
         data2 = json.loads(result2.stdout)
-        
+
         # Should have same structure
         assert data1.keys() == data2.keys()
 
@@ -154,6 +154,6 @@ class TestCLIDeviceAliases:
         # Both should require device_type and device_id
         result1 = run_cli("set-device")
         result2 = run_cli("device", "set")
-        
+
         assert result1.returncode != 0
         assert result2.returncode != 0
