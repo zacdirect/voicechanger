@@ -78,7 +78,7 @@ jobs:
         run: |
           pip download --dest dist/ --find-links dist/ \
             --only-binary :all: \
-            numpy flet sounddevice
+            numpy flet flet-web fastapi "uvicorn[standard]" sounddevice
           echo "All wheels in dist/:"
           ls -lh dist/*.whl
 

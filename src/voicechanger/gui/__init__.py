@@ -244,20 +244,29 @@ def launch_gui() -> None:
         logger.debug("Signal handlers unavailable in current thread")
 
     try:
-        # Raspberry Pi 3's VideoCore IV GPU only supports OpenGL 2.1 / ES 2.0.
-        # Flutter's Skia backend requires GL 3.3+ or Vulkan.  The pre-built
-        # flet-desktop binary crashes at SkSL shader compilation with
-        # "no type named 'subpassInput'" on VC4.  No env-var workaround exists
-        # (LIBGL_ALWAYS_SOFTWARE, lavapipe, GDK_BACKEND all tested — same crash).
-        # Use web-server mode instead: flet serves the UI on localhost and we
-        # open it in the system browser.
-        _is_pi = False
-        with contextlib.suppress(OSError), open("/proc/device-tree/model") as _f:
-            _is_pi = "Raspberry Pi" in _f.read()
-        if _is_pi:
-            logger.info(
-                "Raspberry Pi detected — using web UI (Flutter desktop requires GL 3.3+)"
-            )
+        # Decide native desktop vs web-server mode at runtime.
+        #
+        # Web mode is used when:
+        # 1. No display server (headless / SSH) — DISPLAY and WAYLAND_DISPLAY
+        #    are both unset, so the Flutter desktop binary has nowhere to draw.
+        # 2. Raspberry Pi — the VC4 GPU (Pi 3 and earlier) only supports
+        #    OpenGL 2.1 / ES 2.0; Flutter's Skia backend requires GL 3.3+.
+        #    The flet-desktop binary crashes at SkSL shader compilation with
+        #    "no type named 'subpassInput'".  No env-var workaround exists
+        #    (LIBGL_ALWAYS_SOFTWARE, lavapipe, GDK_BACKEND all tested).
+        _use_web = False
+        if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            _use_web = True
+            logger.info("No display server detected — using web UI")
+        else:
+            with contextlib.suppress(OSError), open("/proc/device-tree/model") as _f:
+                if "Raspberry Pi" in _f.read():
+                    _use_web = True
+                    logger.info(
+                        "Raspberry Pi detected — using web UI"
+                        " (Flutter desktop requires GL 3.3+)"
+                    )
+        if _use_web:
             ft.app(target=_start, view=ft.AppView.WEB_BROWSER)
         else:
             ft.app(target=_start)

@@ -11,6 +11,9 @@ license = {text = "MIT"}
 dependencies = [
     "numpy",
     "flet>=0.84",
+    "flet-web>=0.84",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.35",
     "sounddevice",
 ]
 
