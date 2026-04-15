@@ -88,16 +88,18 @@ def _negotiate_channels(
     sample_rate: int,
     buffer_size: int,
     registry: HardwareHintRegistry | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int] | None:
     """Return (num_input_channels, num_output_channels) that work for this device pair.
+
+    Returns None when ALL output probes fail — the device is unusable and the
+    caller must not attempt to open it in the main process (to avoid JUCE
+    abort()/segfault propagating to the service).
 
     Lookup order:
       1. In-memory cache (avoids re-probing on profile switches within one run)
       2. Hardware hint registry (builtin + user persistent hints)
       3. Subprocess probe (safe against JUCE abort())
          → on success, writes a user hint so the next run skips probing
-
-    Falls back to (1, 2) if probing is unavailable.
     """
     cache_key = (input_device_name, output_device_name)
     if cache_key in _channel_cache:
@@ -116,7 +118,7 @@ def _negotiate_channels(
         output_device_name,
     )
 
-    num_out = 2  # universal default
+    num_out: int | None = None
     for candidate in _OUT_CHANNEL_CANDIDATES:
         if _probe_stream(
             input_device_name, output_device_name,
@@ -125,11 +127,13 @@ def _negotiate_channels(
             num_out = candidate
             logger.info("Output channels negotiated: %d", num_out)
             break
-    else:
+
+    if num_out is None:
         logger.warning(
-            "No output channel count worked for %r; using %d",
-            output_device_name, num_out,
+            "No output channel count worked for %r — device rejected",
+            output_device_name,
         )
+        return None
 
     num_in = 1  # mono mic default
     for candidate in _IN_CHANNEL_CANDIDATES:
@@ -242,9 +246,15 @@ def _open_stream(
         out_name = str(AudioStream.default_output_device_name)
     chain = pb.Pedalboard(plugins or [])
 
-    num_in, num_out = _negotiate_channels(
+    num_in_out = _negotiate_channels(
         in_name, out_name, sample_rate, buffer_size, hint_registry
     )
+    if num_in_out is None:
+        raise RuntimeError(
+            f"Device rejected by probe (all channel counts failed): "
+            f"input={in_name!r} output={out_name!r}"
+        )
+    num_in, num_out = num_in_out
 
     return AudioStream(
         input_device_name=in_name,
@@ -279,6 +289,15 @@ def _candidate_device_pairs(input_device: str, output_device: str) -> list[tuple
         lower = name.lower()
         return not ("input" in lower and "output" not in lower)
 
+    def _is_mac_addr(name: str) -> bool:
+        """Detect BlueALSA dummy devices registered as a bare MAC address (e.g. 00:00:00:00:00:00).
+
+        These appear when BlueALSA is installed but no real BT device is connected.
+        Opening them causes a JUCE abort() / segfault inside pedalboard.
+        """
+        import re
+        return bool(re.match(r"^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$", name.strip()))
+
     wants_default_input = (input_device or "default") == "default"
     wants_default_output = (output_device or "default") == "default"
 
@@ -290,38 +309,55 @@ def _candidate_device_pairs(input_device: str, output_device: str) -> list[tuple
 
         default_in = str(AudioStream.default_input_device_name)
         default_out = str(AudioStream.default_output_device_name)
+
+        in_names = list(AudioStream.input_device_names)
+        out_names = list(AudioStream.output_device_names)
+
+        # PipeWire-first: when defaulting, try PipeWire before resolving ALSA default.
+        # This avoids BlueALSA dummy devices being attempted first on systems where
+        # BlueALSA hijacks the ALSA default but a working PipeWire backend is present.
+        pipewire_in = next((n for n in in_names if "pipewire sound server" in n.lower()), "")
+        pipewire_out = next((n for n in out_names if "pipewire sound server" in n.lower()), "")
+        if wants_default_input and wants_default_output and pipewire_in and pipewire_out:
+            _add(pipewire_in, pipewire_out)
+
         if wants_default_input and wants_default_output:
             resolved_default_in = default_in if _looks_input_capable(default_in) else ""
             resolved_default_out = default_out if _looks_output_capable(default_out) else ""
 
             if not resolved_default_in:
                 resolved_default_in = next(
-                    (n for n in AudioStream.input_device_names if _looks_input_capable(n)),
+                    (n for n in in_names if _looks_input_capable(n) and not _is_mac_addr(n)),
                     default_in,
                 )
             if not resolved_default_out:
                 resolved_default_out = next(
-                    (n for n in AudioStream.output_device_names if _looks_output_capable(n)),
+                    (n for n in out_names if _looks_output_capable(n) and not _is_mac_addr(n)),
                     default_out,
                 )
 
-            _add(resolved_default_in, resolved_default_out)
+            # Skip MAC-address dummy devices — they will segfault pedalboard.
+            if not _is_mac_addr(resolved_default_in) and not _is_mac_addr(resolved_default_out):
+                _add(resolved_default_in, resolved_default_out)
         else:
             resolved_in = default_in if wants_default_input else input_device
             resolved_out = default_out if wants_default_output else output_device
             if resolved_in and resolved_out:
                 _add(resolved_in, resolved_out)
 
-        in_names = list(AudioStream.input_device_names)
-        out_names = list(AudioStream.output_device_names)
-
         in_candidates = [
             n for n in in_names
-            if n and "default alsa output" not in n.lower() and _looks_input_capable(n)
+            if n
+            and "default alsa output" not in n.lower()
+            and not _is_mac_addr(n)
+            and _looks_input_capable(n)
         ]
         out_candidates = [
             n for n in out_names
-            if n and "default alsa output" not in n.lower() and _looks_output_capable(n)
+            if n
+            and "default alsa output" not in n.lower()
+            and not _is_mac_addr(n)
+            and _looks_output_capable(n)
         ]
 
         # Prefer matched-card full-duplex routes (same hardware family), ranked by usability.
@@ -353,17 +389,15 @@ def _candidate_device_pairs(input_device: str, output_device: str) -> list[tuple
         for in_name, out_name in matched_pairs:
             _add(in_name, out_name)
 
-        pipewire_in = next((n for n in in_names if "pipewire sound server" in n.lower()), "")
-        pipewire_out = next((n for n in out_names if "pipewire sound server" in n.lower()), "")
         if pipewire_in and pipewire_out:
             _add(pipewire_in, pipewire_out)
 
         first_in = next(
-            (n for n in in_names if n and "output" not in n.lower()),
+            (n for n in in_names if n and "output" not in n.lower() and not _is_mac_addr(n)),
             default_in,
         )
         first_out = next(
-            (n for n in out_names if n and "input" not in n.lower()),
+            (n for n in out_names if n and "input" not in n.lower() and not _is_mac_addr(n)),
             default_out,
         )
         _add(first_in, first_out)

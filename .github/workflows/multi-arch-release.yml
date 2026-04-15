@@ -95,6 +95,10 @@ jobs:
             | `pedalboard-*cp314*_aarch64.whl` | Patched pedalboard for Python 3.14 (aarch64 / Pi) |
             | `voicechanger_*_<arch>.deb` | All-in-one Debian package (Pi or Ubuntu) |
 
+            **Note:** The aarch64 `.deb` includes the Flutter web runtime for
+            Raspberry Pi GUI support (web-server mode). The x86_64 `.deb` uses
+            native desktop mode.
+
             ## Installation
 
             ### Raspberry Pi / Debian (recommended):

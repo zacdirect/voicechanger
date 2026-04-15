@@ -73,11 +73,11 @@ class HardwareHint:
 class HardwareHintRegistry:
     """Discovers and manages hardware channel hints from builtin and user dirs."""
 
-    def __init__(self, builtin_dir: Path, user_dir: Path) -> None:
-        self._builtin_dir = builtin_dir
-        self._user_dir = user_dir
-        self._builtin: list[HardwareHint] = self._load_dir(builtin_dir)
-        self._user: list[HardwareHint] = self._load_dir(user_dir)
+    def __init__(self, builtin_dir: Path | str, user_dir: Path | str) -> None:
+        self._builtin_dir = Path(builtin_dir)
+        self._user_dir = Path(user_dir)
+        self._builtin: list[HardwareHint] = self._load_dir(self._builtin_dir)
+        self._user: list[HardwareHint] = self._load_dir(self._user_dir)
 
     def _load_dir(self, directory: Path) -> list[HardwareHint]:
         if not directory.exists():

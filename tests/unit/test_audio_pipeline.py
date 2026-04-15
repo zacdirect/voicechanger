@@ -72,6 +72,49 @@ class TestCandidateDevicePairs:
             "USB C Earbuds, USB Audio; Front output / input",
         }
 
+    def test_pipewire_first_when_default_and_bluealsa_present(self) -> None:
+        """PipeWire is tried before BlueALSA dummy default when both are present."""
+        fake_audio_stream = types.SimpleNamespace(
+            default_input_device_name="00:00:00:00:00:00",
+            default_output_device_name="00:00:00:00:00:00",
+            input_device_names=[
+                "00:00:00:00:00:00",
+                "PipeWire Sound Server",
+            ],
+            output_device_names=[
+                "00:00:00:00:00:00",
+                "PipeWire Sound Server",
+            ],
+        )
+        fake_io_module = types.SimpleNamespace(AudioStream=fake_audio_stream)
+
+        with patch.dict("sys.modules", {"pedalboard.io": fake_io_module}):
+            pairs = _candidate_device_pairs("default", "default")
+
+        assert pairs, "Should have at least one candidate pair"
+        assert pairs[0] == ("PipeWire Sound Server", "PipeWire Sound Server")
+        # MAC-address dummy must not appear in any pair
+        for in_d, out_d in pairs:
+            assert "00:00:00:00:00:00" not in (in_d, out_d), (
+                f"BlueALSA dummy device leaked into pairs: {in_d!r}, {out_d!r}"
+            )
+
+    def test_mac_address_devices_excluded_from_candidates(self) -> None:
+        """Devices whose name is a bare MAC address are filtered from all candidate pairs."""
+        fake_audio_stream = types.SimpleNamespace(
+            default_input_device_name="AB:CD:EF:01:23:45",
+            default_output_device_name="AB:CD:EF:01:23:45",
+            input_device_names=["AB:CD:EF:01:23:45", "hw:1,0"],
+            output_device_names=["AB:CD:EF:01:23:45", "hw:1,0"],
+        )
+        fake_io_module = types.SimpleNamespace(AudioStream=fake_audio_stream)
+
+        with patch.dict("sys.modules", {"pedalboard.io": fake_io_module}):
+            pairs = _candidate_device_pairs("default", "default")
+
+        for in_d, out_d in pairs:
+            assert "AB:CD:EF:01:23:45" not in (in_d, out_d)
+
 
 class TestPluginConstruction:
     """Test building plugin list from profile."""

@@ -47,7 +47,7 @@ def launch_gui() -> None:
 
     import flet as ft
 
-    from voicechanger.config import load_config, save_config
+    from voicechanger.config import load_config, resolve_profile_dirs, save_config
     from voicechanger.gui.app import VoiceChangerApp
     from voicechanger.gui.ipc_client import IpcClient
     from voicechanger.gui.state import GuiState
@@ -59,9 +59,10 @@ def launch_gui() -> None:
 
     config_path = Path("voicechanger.toml")
     config = load_config(config_path)
+    _resolved = resolve_profile_dirs(config)
     registry = ProfileRegistry(
-        builtin_dir=Path(config.profiles.builtin_dir),
-        user_dir=Path(config.profiles.user_dir),
+        builtin_dir=Path(_resolved.profiles.builtin_dir),
+        user_dir=Path(_resolved.profiles.user_dir),
     )
 
     state = GuiState()
@@ -243,13 +244,20 @@ def launch_gui() -> None:
         logger.debug("Signal handlers unavailable in current thread")
 
     try:
-        # Raspberry Pi's VideoCore GPU lacks Vulkan support for Flutter's
-        # Impeller renderer, so fall back to the browser-based UI.
+        # Raspberry Pi 3's VideoCore IV GPU only supports OpenGL 2.1 / ES 2.0.
+        # Flutter's Skia backend requires GL 3.3+ or Vulkan.  The pre-built
+        # flet-desktop binary crashes at SkSL shader compilation with
+        # "no type named 'subpassInput'" on VC4.  No env-var workaround exists
+        # (LIBGL_ALWAYS_SOFTWARE, lavapipe, GDK_BACKEND all tested — same crash).
+        # Use web-server mode instead: flet serves the UI on localhost and we
+        # open it in the system browser.
         _is_pi = False
         with contextlib.suppress(OSError), open("/proc/device-tree/model") as _f:
             _is_pi = "Raspberry Pi" in _f.read()
         if _is_pi:
-            logger.info("Raspberry Pi detected — launching GUI in web browser")
+            logger.info(
+                "Raspberry Pi detected — using web UI (Flutter desktop requires GL 3.3+)"
+            )
             ft.app(target=_start, view=ft.AppView.WEB_BROWSER)
         else:
             ft.app(target=_start)

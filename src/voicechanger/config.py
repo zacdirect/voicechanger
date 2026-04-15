@@ -31,7 +31,7 @@ class AudioConfig:
 @dataclass
 class ProfilesConfig:
     builtin_dir: str = "profiles/builtin"
-    user_dir: str = "profiles/user"
+    user_dir: str = ""  # empty → ~/.voicechanger/profiles
     active_profile: str = "clean"
 
 
@@ -107,7 +107,7 @@ def load_config(path: Path) -> Config:
     if isinstance(profiles, dict):
         config.profiles = ProfilesConfig(
             builtin_dir=_safe_str(profiles.get("builtin_dir"), "profiles/builtin"),
-            user_dir=_safe_str(profiles.get("user_dir"), "profiles/user"),
+            user_dir=_safe_str(profiles.get("user_dir"), ""),
             active_profile=_safe_str(profiles.get("active_profile"), "clean"),
         )
 
@@ -151,7 +151,7 @@ def resolve_hardware_dirs(config: Config) -> tuple[Path, Path]:
     """Return resolved (builtin_dir, user_dir) Path objects for hardware hints.
 
     builtin_dir: resolved relative to the package root.
-    user_dir: XDG-based (~/.config/voicechanger/hardware) when not configured.
+    user_dir: ~/.voicechanger/hardware when not configured.
     """
     builtin_raw = config.hardware.builtin_dir or "hardware/builtin"
     builtin = Path(builtin_raw)
@@ -159,16 +159,16 @@ def resolve_hardware_dirs(config: Config) -> tuple[Path, Path]:
         builtin = _PACKAGE_ROOT / builtin
 
     user_raw = config.hardware.user_dir
-    if user_raw:
-        user = Path(user_raw).expanduser()
-    else:
-        user = Path.home() / ".config" / "voicechanger" / "hardware"
+    user = Path(user_raw).expanduser() if user_raw else Path.home() / ".voicechanger" / "hardware"
 
     return builtin, user
 
 
 def resolve_profile_dirs(config: Config) -> Config:
-    """Return a copy of config with relative profile dirs resolved against the package root.
+    """Return a copy of config with profile dirs resolved to absolute paths.
+
+    builtin_dir: resolved relative to the package root.
+    user_dir: ~/.voicechanger/profiles when not configured.
 
     The original config is not mutated, so save_config will still write
     relative paths to disk.
@@ -177,7 +177,11 @@ def resolve_profile_dirs(config: Config) -> Config:
     resolved = copy.copy(config)
     resolved.profiles = copy.copy(config.profiles)
     resolved.profiles.builtin_dir = _resolve_dir(config.profiles.builtin_dir)
-    resolved.profiles.user_dir = _resolve_dir(config.profiles.user_dir)
+    user_raw = config.profiles.user_dir
+    if not user_raw:
+        resolved.profiles.user_dir = str(Path.home() / ".voicechanger" / "profiles")
+    else:
+        resolved.profiles.user_dir = _resolve_dir(user_raw)
     return resolved
 
 
