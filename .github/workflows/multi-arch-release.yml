@@ -1,30 +1,13 @@
-name: Multi-Architecture Release
+name: Release
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:  # Allow manual triggering
+    branches: [main]
 
 jobs:
   quality:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v5
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.14"
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install .[dev]
-      - name: Lint
-        run: ruff check src tests
-      - name: Test
-        run: pytest --tb=short -q
+    uses: ./.github/workflows/quality.yml
 
-  # Build for both architectures × both Python versions
   build:
     needs: quality
     strategy:
@@ -36,14 +19,11 @@ jobs:
       arch: ${{ matrix.arch }}
       python-version: ${{ matrix.python-version }}
 
-  # Publish release
-  publish-release:
+  publish:
     needs: build
     runs-on: ubuntu-22.04
-    if: success()
     permissions:
       contents: write
-
     steps:
       - uses: actions/checkout@v5
 
@@ -52,7 +32,6 @@ jobs:
         run: |
           version=$(grep -m1 '^version' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Release version: $version"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -62,16 +41,11 @@ jobs:
       - name: Collect release assets
         run: |
           mkdir -p release-assets/
-          # De-duplicate the voicechanger wheel (same py3-none-any from every arch)
           find artifacts -name 'voicechanger-*.whl' | head -1 | xargs -I{} cp {} release-assets/
-          # Per-arch pedalboard wheels
           find artifacts -name 'pedalboard-*.whl' -exec cp {} release-assets/ \;
-          # Per-arch .deb packages
           find artifacts -name '*.deb' -exec cp {} release-assets/ \;
-          # Patch for anyone building from source
           cp native/patches/0001-add-LivePitchShift.patch release-assets/
           (cd release-assets && sha256sum * > SHA256SUMS)
-          echo "Release assets:"
           ls -lh release-assets/
 
       - name: Create GitHub Release
@@ -87,29 +61,29 @@ jobs:
             | File | Description |
             |------|-------------|
             | `voicechanger-*.whl` | Pure-Python wheel (all platforms) |
-            | `pedalboard-*cp312*_x86_64.whl` | Patched pedalboard for Python 3.12 (x86_64) |
-            | `pedalboard-*cp312*_aarch64.whl` | Patched pedalboard for Python 3.12 (aarch64 / Pi) |
-            | `pedalboard-*cp313*_x86_64.whl` | Patched pedalboard for Python 3.13 (x86_64) |
-            | `pedalboard-*cp313*_aarch64.whl` | Patched pedalboard for Python 3.13 (aarch64 / Pi) |
-            | `pedalboard-*cp314*_x86_64.whl` | Patched pedalboard for Python 3.14 (x86_64) |
-            | `pedalboard-*cp314*_aarch64.whl` | Patched pedalboard for Python 3.14 (aarch64 / Pi) |
-            | `voicechanger_*_<arch>.deb` | All-in-one Debian package (Pi or Ubuntu) |
+            | `pedalboard-*_x86_64.whl` | Patched pedalboard wheels (x86_64) |
+            | `pedalboard-*_aarch64.whl` | Patched pedalboard wheels (aarch64 / Pi) |
+            | `voicechanger_*_<arch>.deb` | All-in-one Debian package |
+
+            Both `.deb` packages include the Flutter web runtime for
+            headless / Raspberry Pi web-server GUI mode. Native desktop
+            mode is used automatically when a display server is available.
 
             ## Installation
 
-            ### Raspberry Pi / Debian (recommended):
-            \`\`\`bash
+            ### Raspberry Pi / Debian:
+            ```bash
             sudo dpkg -i voicechanger_*_arm64.deb
-            \`\`\`
+            ```
 
-            ### Via pip (any Linux):
-            \`\`\`bash
+            ### Via pip:
+            ```bash
             pip install voicechanger-*.whl pedalboard-*$(uname -m)*.whl
-            \`\`\`
+            ```
 
             ### Verification
-            \`\`\`bash
+            ```bash
             sha256sum -c SHA256SUMS
-            \`\`\`
+            ```
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

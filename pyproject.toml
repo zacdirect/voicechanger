@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "voicechanger"
-version = "0.1.0"
+version = "0.1.1"
 description = "Real-time voice changer for Raspberry Pi using Pedalboard"
 requires-python = ">=3.12"
 license = {text = "MIT"}
@@ -12,6 +12,8 @@ dependencies = [
     "numpy",
     "flet>=0.84",
     "flet-web>=0.84",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.35",
     "sounddevice",
 ]
 

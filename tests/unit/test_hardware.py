@@ -250,3 +250,17 @@ class TestNegotiateChannelsIntegration:
         actual_out = kwargs.get("num_out", args[3] if len(args) > 3 else None)
         assert actual_in == result[0]
         assert actual_out == result[1]
+
+    def test_returns_none_when_all_output_probes_fail(self, tmp_path: Path) -> None:
+        """When every output probe fails, return None to prevent main-process open."""
+        from voicechanger.audio import _channel_cache, _negotiate_channels
+
+        _channel_cache.clear()
+        registry = MagicMock(spec=HardwareHintRegistry)
+        registry.lookup.return_value = None
+
+        with patch("voicechanger.audio._probe_stream", return_value=False):
+            result = _negotiate_channels("BadIn", "BadOut", 48000, 256, registry)
+
+        assert result is None
+        registry.write_user_hint.assert_not_called()

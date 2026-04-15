@@ -60,6 +60,32 @@ mkdir -p "$STAGE/usr/local/bin"
 # Pre-installed Python packages (the entire lib tree)
 cp -a "$LIB" "$STAGE/opt/voicechanger/lib"
 
+# flet 0.84 needs both flet-web and flet-desktop at import time.
+# pip already installed flet-web (and fastapi/uvicorn) via pyproject.toml deps
+# into $LIB.  We just need to add flet-desktop (py3-none-any, ships Flutter
+# binary downloaded on first use) and the pre-built Flutter web runtime bundle
+# (a non-Python asset that flet-web expects under flet_web/web/).
+FLET_VERSION=$(python3 -c "
+from pathlib import Path
+for d in Path('$LIB').glob('flet-*.dist-info'):
+    for line in (d / 'METADATA').read_text().splitlines():
+        if line.startswith('Version:'):
+            print(line.split(': ',1)[1]); break
+" 2>/dev/null || echo "0.84.0")
+
+pip install --target "$STAGE/opt/voicechanger/lib" \
+    "flet-desktop==$FLET_VERSION" --no-deps --quiet
+echo "Installed flet-desktop $FLET_VERSION"
+
+# Download and extract the pre-built Flutter web runtime bundle.
+FLET_WEB_TARBALL="$DIST/flet-web.tar.gz"
+FLET_WEB_URL="https://github.com/flet-dev/flet/releases/download/v${FLET_VERSION}/flet-web.tar.gz"
+echo "Downloading Flutter web bundle from $FLET_WEB_URL"
+curl -sL -o "$FLET_WEB_TARBALL" "$FLET_WEB_URL"
+mkdir -p "$STAGE/opt/voicechanger/lib/flet_web/web"
+tar xzf "$FLET_WEB_TARBALL" -C "$STAGE/opt/voicechanger/lib/flet_web/web"
+echo "Extracted Flutter web bundle ($(du -sh "$STAGE/opt/voicechanger/lib/flet_web/web" | cut -f1))"
+
 # Built-in profiles
 cp -a "$PROJECT_ROOT/profiles" "$STAGE/opt/voicechanger/profiles"
 

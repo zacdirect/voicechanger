@@ -47,7 +47,7 @@ def launch_gui() -> None:
 
     import flet as ft
 
-    from voicechanger.config import load_config, save_config
+    from voicechanger.config import load_config, resolve_profile_dirs, save_config
     from voicechanger.gui.app import VoiceChangerApp
     from voicechanger.gui.ipc_client import IpcClient
     from voicechanger.gui.state import GuiState
@@ -59,9 +59,10 @@ def launch_gui() -> None:
 
     config_path = Path("voicechanger.toml")
     config = load_config(config_path)
+    _resolved = resolve_profile_dirs(config)
     registry = ProfileRegistry(
-        builtin_dir=Path(config.profiles.builtin_dir),
-        user_dir=Path(config.profiles.user_dir),
+        builtin_dir=Path(_resolved.profiles.builtin_dir),
+        user_dir=Path(_resolved.profiles.user_dir),
     )
 
     state = GuiState()
@@ -243,13 +244,29 @@ def launch_gui() -> None:
         logger.debug("Signal handlers unavailable in current thread")
 
     try:
-        # Raspberry Pi's VideoCore GPU lacks Vulkan support for Flutter's
-        # Impeller renderer, so fall back to the browser-based UI.
-        _is_pi = False
-        with contextlib.suppress(OSError), open("/proc/device-tree/model") as _f:
-            _is_pi = "Raspberry Pi" in _f.read()
-        if _is_pi:
-            logger.info("Raspberry Pi detected — launching GUI in web browser")
+        # Decide native desktop vs web-server mode at runtime.
+        #
+        # Web mode is used when:
+        # 1. No display server (headless / SSH) — DISPLAY and WAYLAND_DISPLAY
+        #    are both unset, so the Flutter desktop binary has nowhere to draw.
+        # 2. Raspberry Pi — the VC4 GPU (Pi 3 and earlier) only supports
+        #    OpenGL 2.1 / ES 2.0; Flutter's Skia backend requires GL 3.3+.
+        #    The flet-desktop binary crashes at SkSL shader compilation with
+        #    "no type named 'subpassInput'".  No env-var workaround exists
+        #    (LIBGL_ALWAYS_SOFTWARE, lavapipe, GDK_BACKEND all tested).
+        _use_web = False
+        if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+            _use_web = True
+            logger.info("No display server detected — using web UI")
+        else:
+            with contextlib.suppress(OSError), open("/proc/device-tree/model") as _f:
+                if "Raspberry Pi" in _f.read():
+                    _use_web = True
+                    logger.info(
+                        "Raspberry Pi detected — using web UI"
+                        " (Flutter desktop requires GL 3.3+)"
+                    )
+        if _use_web:
             ft.app(target=_start, view=ft.AppView.WEB_BROWSER)
         else:
             ft.app(target=_start)
